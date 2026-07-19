@@ -208,6 +208,25 @@ html, body {
   margin-bottom: 6px;
 }
 .btn-ctrl:active { transform: scale(0.97); }
+
+/* ---- 初始化按钮 ---- */
+.btn-reset {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 5px 0;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 5px;
+  background: rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.btn-reset:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
 .btn-arm-off  { background: var(--danger-dim); color: var(--danger);  border: 1px solid rgba(244,67,54,0.3); }
 .btn-arm-on   { background: var(--success-dim); color: var(--success); border: 1px solid rgba(76,175,80,0.3); }
 .btn-auto-off { background: var(--danger-dim); color: var(--danger);  border: 1px solid rgba(244,67,54,0.3); }
@@ -237,15 +256,17 @@ html, body {
 .thr-value { font-size: 13px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
 
 /* =============================================
-   右上信息面板
+   右上信息面板 (175% 缩放)
    ============================================= */
 #infoPanel {
   position: fixed;
   top: 10px; right: 10px;
+  transform: scale(1.75);
+  transform-origin: top right;
   width: 185px;
   background: var(--bg-panel);
-  backdrop-filter: blur(var(--acrylic-blur));
-  -webkit-backdrop-filter: blur(var(--acrylic-blur));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--border-panel);
   border-radius: var(--radius);
   padding: 12px 14px;
@@ -315,6 +336,75 @@ html, body {
   z-index: 10; pointer-events: none; white-space: nowrap; letter-spacing: 0.3px;
 }
 #statusBar .sep { margin: 0 8px; opacity: 0.3; }
+
+/* =============================================
+   3D 模式
+   ============================================= */
+#trailCanvas3d {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0;
+}
+
+/* ---- 模式切换 Segmented ---- */
+.mode-switch {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px;
+  padding: 2px;
+  height: 24px;
+  cursor: pointer;
+  flex-shrink: 0;
+  pointer-events: auto;
+}
+.mode-opt {
+  position: relative;
+  z-index: 1;
+  padding: 0 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  line-height: 20px;
+  transition: color 0.3s;
+  user-select: none;
+}
+.mode-opt.active { color: var(--text-primary); }
+.mode-slider {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: calc(50% - 2px);
+  height: calc(100% - 4px);
+  background: var(--accent-dim);
+  border: 1px solid rgba(79,195,247,0.3);
+  border-radius: 12px;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+.mode-switch[data-mode="3d"] .mode-slider {
+  transform: translateX(100%);
+}
+
+/* ---- 测距连线开关 ---- */
+.dist-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.dist-toggle input[type="checkbox"] {
+  accent-color: var(--accent);
+}
 </style>
 </head>
 <body>
@@ -349,6 +439,10 @@ html, body {
         <span class="hoff">偏移</span>
       </div>
       <div id="anchorInputs"></div>
+      <button class="btn-reset" id="btnReset">初始化默认值</button>
+      <label class="dist-toggle">
+        <input type="checkbox" id="showDistLines"> 显示测距连线
+      </label>
     </div>
   </div>
 
@@ -405,6 +499,12 @@ html, body {
 
 <!-- 底部 -->
 <div id="statusBar">
+  <div class="mode-switch" id="modeSwitch" data-mode="2d">
+    <span class="mode-opt active" data-mode="2d">2D</span>
+    <span class="mode-opt" data-mode="3d">3D</span>
+    <span class="mode-slider"></span>
+  </div>
+  <span class="sep">|</span>
   <span id="fpsDisplay">0 FPS</span>
   <span class="sep">|</span>
   <span id="trailPoints">尾迹 0 点</span>
@@ -412,6 +512,7 @@ html, body {
 
 <!-- Canvas -->
 <canvas id="trailCanvas"></canvas>
+<canvas id="trailCanvas3d"></canvas>
 
 <script>
 // =============================================
@@ -442,7 +543,7 @@ html, body {
 
   /* ---- 状态 ---- */
   const S = {
-    dx: 0, dy: 0,
+    dx: 0, dy: 0, dz: 0,
     sx: 0, sy: 0, sz: 0,
     tx: 2.0, ty: 2.0, tz: 1.0,
     fetchT: 0,
@@ -468,12 +569,16 @@ html, body {
      ========================================== */
   function resize() {
     dpr = window.devicePixelRatio || 1;
-    const r = canvas.getBoundingClientRect();
-    W = r.width; H = r.height;
+    W = window.innerWidth; H = window.innerHeight;
     canvas.width = W*dpr; canvas.height = H*dpr;
     ctx.scale(dpr,dpr);
     px=PAD.l; py=PAD.t; pw=W-PAD.l-PAD.r; ph=H-PAD.t-PAD.b;
     sc = Math.min(pw,ph)/RSIZE;
+    if (renderer) {
+      renderer.setSize(W, H);
+      renderer.setPixelRatio(dpr);
+      if (camera3d) { camera3d.aspect = W / H; camera3d.updateProjectionMatrix(); }
+    }
   }
 
   function toC(rx,ry) {
@@ -560,12 +665,33 @@ html, body {
     }
   }
 
+  /* 初始化默认值 */
+  function resetDefaults() {
+    // 目标点
+    postSt({ target_x: 2.0, target_y: 2.0, target_z: 1.0 });
+    S.tx = 2.0; S.ty = 2.0; S.tz = 1.0;
+    document.getElementById('tgtX').value = '2.0';
+    document.getElementById('tgtY').value = '2.0';
+    document.getElementById('tgtZ').value = '1.0';
+    // 基站
+    const defAnchors = [[0,0,0.5],[0,4,2.5],[4,4,0.5],[4,0,2.5]];
+    postSt({ anchors: defAnchors, offset_r0:0, offset_r1:0, offset_r2:0, offset_r3:0 });
+    S.anchors = defAnchors;
+    S.off = [0,0,0,0];
+    // 重建基站输入框
+    buildAnchors();
+  }
+
   /* 目标 */
   function setupTargetInputs() {
     ['tgtX','tgtY','tgtZ'].forEach(id => {
       document.getElementById(id).addEventListener('change', function() {
         const k = this.id.replace('tgt','target_').toLowerCase();
         const v = parseFloat(this.value)||0;
+        // 立即更新本地状态，Canvas 目标星马上响应
+        if (k === 'target_x') S.tx = v;
+        else if (k === 'target_y') S.ty = v;
+        else if (k === 'target_z') S.tz = v;
         const p = {}; p[k] = v; postSt(p);
       });
     });
@@ -648,24 +774,6 @@ html, body {
     drawTarget();
     drawTrail(now);
     drawSphere();
-
-    if (S.connected) {
-      elX.textContent = S.sx.toFixed(2)+' m';
-      elY.textContent = S.sy.toFixed(2)+' m';
-      elZ.textContent = S.sz.toFixed(2)+' m';
-      document.getElementById('rcRoll').textContent = S.rcR;
-      document.getElementById('rcPitch').textContent = S.rcP;
-      document.getElementById('rcYaw').textContent = S.rcY;
-      document.getElementById('rcThrottle').textContent = Math.round(S.rcT);
-      document.getElementById('d0').textContent = S.r0.toFixed(2)+' m';
-      document.getElementById('d1').textContent = S.r1.toFixed(2)+' m';
-      document.getElementById('d2').textContent = S.r2.toFixed(2)+' m';
-      document.getElementById('d3').textContent = S.r3.toFixed(2)+' m';
-    }
-
-    S.fc++;
-    if (now-S.ft>=1000) { S.fps=S.fc; S.fc=0; S.ft=now; elFps.textContent=S.fps+' FPS'; }
-    elTrailPts.textContent='尾迹 '+trail.length+' 点';
   }
 
   function drawGrid() {
@@ -761,32 +869,454 @@ html, body {
   }
 
   /* ==========================================
+     拖拽 (Canvas 鼠标事件)
+     ========================================== */
+  function toWorld(cx, cy) {
+    const rx = (cx - px - (pw - sc*RSIZE)/2) / sc + RMIN;
+    const ry = RMAX - (cy - py - (ph - sc*RSIZE)/2) / sc;
+    return { x: rx, y: ry };
+  }
+
+  let dragTarget = null; // null | 'target' | 'anchor_0' | 'anchor_1' | ...
+
+  function onPointerDown(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (W / rect.width);
+    const my = (e.clientY - rect.top) * (H / rect.height);
+    const w = toWorld(mx, my);
+
+    // 点击目标点 (红色星)
+    const t = toC(S.tx, S.ty);
+    if (Math.hypot(mx - t.x, my - t.y) < 20) {
+      dragTarget = 'target';
+      return;
+    }
+    // 点击基站
+    for (let i = 0; i < S.anchors.length; i++) {
+      const a = toC(S.anchors[i][0], S.anchors[i][1]);
+      if (Math.hypot(mx - a.x, my - a.y) < 18) {
+        dragTarget = 'anchor_' + i;
+        return;
+      }
+    }
+  }
+
+  function onPointerMove(e) {
+    if (!dragTarget) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (W / rect.width);
+    const my = (e.clientY - rect.top) * (H / rect.height);
+    const w = toWorld(mx, my);
+
+    if (dragTarget === 'target') {
+      S.tx = Math.max(RMIN, Math.min(RMAX, w.x));
+      S.ty = Math.max(RMIN, Math.min(RMAX, w.y));
+      document.getElementById('tgtX').value = S.tx.toFixed(1);
+      document.getElementById('tgtY').value = S.ty.toFixed(1);
+      // 防抖后 POST
+      postSt({ target_x: S.tx, target_y: S.ty });
+    } else if (dragTarget && dragTarget.startsWith('anchor_')) {
+      const idx = parseInt(dragTarget.split('_')[1]);
+      S.anchors[idx][0] = Math.max(RMIN, Math.min(RMAX, w.x));
+      S.anchors[idx][1] = Math.max(RMIN, Math.min(RMAX, w.y));
+      // 更新左侧输入框
+      const inputs = document.querySelectorAll('#anchorInputs input[data-xyza]');
+      inputs.forEach(inp => {
+        const [ai, aj] = inp.dataset.xyza.split(',').map(Number);
+        if (ai === idx) inp.value = S.anchors[ai][aj].toFixed(1);
+      });
+      postSt({ anchors: S.anchors.map(a => [a[0], a[1], a[2]]) });
+    }
+  }
+
+  function onPointerUp(e) {
+    dragTarget = null;
+  }
+
+  /* ==========================================
      主循环
      ========================================== */
   const LERP = 0.13;
 
   function tick(ts) {
-    const dx=S.sx-S.dx, dy=S.sy-S.dy;
-    if (Math.hypot(dx,dy)>0.001) { S.dx+=dx*LERP; S.dy+=dy*LERP; }
-    else { S.dx=S.sx; S.dy=S.sy; }
-    const p=toC(S.dx,S.dy);
-    trail.push({x:p.x,y:p.y,time:ts});
-    const cut=ts-TRAIL_MS; let lo=0, hi=trail.length;
-    while (lo<hi) { const m=(lo+hi)>>>1; if (trail[m].time<cut) lo=m+1; else hi=m; }
-    if (lo>0) trail.splice(0,lo);
+    const dx=S.sx-S.dx, dy=S.sy-S.dy, dz=S.sz-S.dz;
+    if (Math.hypot(dx,dy,dz)>0.001) { S.dx+=dx*LERP; S.dy+=dy*LERP; S.dz+=dz*LERP; }
+    else { S.dx=S.sx; S.dy=S.sy; S.dz=S.sz; }
+
+    // 2D 尾迹 (仅 2D 模式)
+    if (!mode3d) {
+      const p=toC(S.dx,S.dy);
+      trail.push({x:p.x,y:p.y,time:ts});
+      const cut=ts-TRAIL_MS; let lo=0, hi=trail.length;
+      while (lo<hi) { const m=(lo+hi)>>>1; if (trail[m].time<cut) lo=m+1; else hi=m; }
+      if (lo>0) trail.splice(0,lo);
+    }
+
     if (S.connected && ts-S.fetchT>3000) { S.connected=false; syncUI(); }
-    draw(ts);
+
+    // 渲染
+    if (mode3d) { render3d(ts); }
+    else { draw(ts); }
+
+    // 信息面板 (始终更新)
+    if (S.connected) {
+      elX.textContent = S.sx.toFixed(2)+' m';
+      elY.textContent = S.sy.toFixed(2)+' m';
+      elZ.textContent = S.sz.toFixed(2)+' m';
+      document.getElementById('rcRoll').textContent = S.rcR;
+      document.getElementById('rcPitch').textContent = S.rcP;
+      document.getElementById('rcYaw').textContent = S.rcY;
+      document.getElementById('rcThrottle').textContent = Math.round(S.rcT);
+      document.getElementById('d0').textContent = S.r0.toFixed(2)+' m';
+      document.getElementById('d1').textContent = S.r1.toFixed(2)+' m';
+      document.getElementById('d2').textContent = S.r2.toFixed(2)+' m';
+      document.getElementById('d3').textContent = S.r3.toFixed(2)+' m';
+    }
+
+    // FPS
+    S.fc++;
+    if (ts-S.ft>=1000) { S.fps=S.fc; S.fc=0; S.ft=ts; elFps.textContent=S.fps+' FPS'; }
+    elTrailPts.textContent='尾迹 '+trail.length+' 点';
+
     requestAnimationFrame(tick);
+  }
+
+  /* ==========================================
+     3D 引擎 (Three.js 懒加载)
+     ========================================== */
+  let mode3d = false;
+  let threeLoaded = false, threeLoading = false, threeLoadError = false;
+  let scene, camera3d, renderer, controls3d;
+  let anchorMeshes = [], anchorSprites = [];
+  let targetMesh, targetSprite;
+  let tagMesh, tagGlow, projLine;
+  let trailLine3d;
+  let distLineMeshes = [];
+  let showDistLines = false;
+  const TRAIL3D_MAX = 600;
+  let trail3dData = [];
+  let camAnim = null;
+
+  /* 坐标映射: 物理 [x,y,z] → Three.js [x, z, y] (Y-up) */
+  function p2t(x, y, z) { return [x, z, y]; }
+
+  function loadThreeJS() {
+    return new Promise((resolve, reject) => {
+      if (threeLoaded) { resolve(); return; }
+      if (threeLoadError) { reject(); return; }
+      if (threeLoading) {
+        const chk = setInterval(() => {
+          if (threeLoaded) { clearInterval(chk); resolve(); }
+          if (threeLoadError) { clearInterval(chk); reject(); }
+        }, 100);
+        return;
+      }
+      threeLoading = true;
+      const s1 = document.createElement('script');
+      s1.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+      s1.onload = () => {
+        const s2 = document.createElement('script');
+        s2.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+        s2.onload = () => { threeLoaded = true; initScene3d(); resolve(); };
+        s2.onerror = () => { threeLoadError = true; console.error('OrbitControls 加载失败'); reject(); };
+        document.head.appendChild(s2);
+      };
+      s1.onerror = () => { threeLoadError = true; console.error('Three.js 加载失败'); reject(); };
+      document.head.appendChild(s1);
+    });
+  }
+
+  function initScene3d() {
+    const THREE = window.THREE;
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0e14);
+    scene.fog = new THREE.FogExp2(0x0a0e14, 0.035);
+
+    camera3d = new THREE.PerspectiveCamera(50, W / H, 0.1, 200);
+    camera3d.position.set(2, 10, 2);
+
+    const c3d = document.getElementById('trailCanvas3d');
+    renderer = new THREE.WebGLRenderer({ canvas: c3d, antialias: true });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(dpr);
+
+    controls3d = new THREE.OrbitControls(camera3d, renderer.domElement);
+    controls3d.target.set(2, 0, 2);
+    controls3d.enableDamping = true;
+    controls3d.dampingFactor = 0.08;
+    controls3d.maxPolarAngle = Math.PI / 2.05;
+    controls3d.minDistance = 2;
+    controls3d.maxDistance = 30;
+    controls3d.enabled = false;
+
+    buildGroundGrid3d();
+    buildAxes3d();
+    buildAnchors3d();
+    buildTarget3d();
+    buildTag3d();
+    buildTrail3d();
+    buildDistLines3d();
+
+    /* 光照 */
+    scene.add(new THREE.AmbientLight(0x404060, 0.8));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+    dir.position.set(5, 10, 5);
+    scene.add(dir);
+  }
+
+  function buildGroundGrid3d() {
+    const THREE = window.THREE;
+    const grid = new THREE.GridHelper(9, 18, 0x3a4a5a, 0x1a2a3a);
+    grid.position.set(2.5, 0, 2.5);
+    scene.add(grid);
+    const geo = new THREE.PlaneGeometry(9, 9);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x0d1117, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+    const ground = new THREE.Mesh(geo, mat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(2.5, -0.01, 2.5);
+    scene.add(ground);
+  }
+
+  function buildAxes3d() {
+    const THREE = window.THREE;
+    const mk = (from, to, color) => {
+      const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...from), new THREE.Vector3(...to)]);
+      return new THREE.Line(g, new THREE.LineBasicMaterial({ color }));
+    };
+    scene.add(mk([0,0,0],[7,0,0],0xff4444));
+    scene.add(mk([0,0,0],[0,0,7],0x44ff44));
+    scene.add(mk([0,0,0],[0,5,0],0x4488ff));
+  }
+
+  function makeSprite3d(text, color) {
+    const THREE = window.THREE;
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+    const c = cv.getContext('2d');
+    c.font = 'bold 32px Segoe UI, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = color || '#fff'; c.fillText(text, 128, 32);
+    const tex = new THREE.CanvasTexture(cv);
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    const sp = new THREE.Sprite(mat); sp.scale.set(1.6, 0.4, 1);
+    return sp;
+  }
+
+  function buildAnchors3d() {
+    const THREE = window.THREE;
+    for (let i = 0; i < 4; i++) {
+      const geo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+      const mat = new THREE.MeshPhongMaterial({ color: 0x5c6bc0, emissive: 0x2a2f5a });
+      const mesh = new THREE.Mesh(geo, mat);
+      scene.add(mesh); anchorMeshes.push(mesh);
+      const sp = makeSprite3d('A' + i, '#5c6bc0');
+      scene.add(sp); anchorSprites.push(sp);
+    }
+    updateAnchorPos3d();
+  }
+
+  function updateAnchorPos3d() {
+    for (let i = 0; i < 4; i++) {
+      const a = S.anchors[i], p = p2t(a[0], a[1], a[2]);
+      anchorMeshes[i].position.set(p[0], p[1], p[2]);
+      anchorSprites[i].position.set(p[0], p[1] + 0.5, p[2]);
+    }
+  }
+
+  function buildTarget3d() {
+    const THREE = window.THREE;
+    const geo = new THREE.SphereGeometry(0.25, 24, 24);
+    const mat = new THREE.MeshPhongMaterial({ color: 0xff5722, emissive: 0x661a0a });
+    targetMesh = new THREE.Mesh(geo, mat); scene.add(targetMesh);
+    targetSprite = makeSprite3d('Target', '#ff5722'); scene.add(targetSprite);
+    updateTargetPos3d();
+  }
+
+  function updateTargetPos3d() {
+    const p = p2t(S.tx, S.ty, S.tz);
+    targetMesh.position.set(p[0], p[1], p[2]);
+    targetSprite.position.set(p[0], p[1] + 0.6, p[2]);
+  }
+
+  function buildTag3d() {
+    const THREE = window.THREE;
+    const geo = new THREE.SphereGeometry(0.2, 24, 24);
+    const mat = new THREE.MeshPhongMaterial({ color: 0x4fc3f7, emissive: 0x1a4a5a, shininess: 80 });
+    tagMesh = new THREE.Mesh(geo, mat); scene.add(tagMesh);
+    const gGeo = new THREE.SphereGeometry(0.4, 16, 16);
+    const gMat = new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.15 });
+    tagGlow = new THREE.Mesh(gGeo, gMat); scene.add(tagGlow);
+    const pGeo = new THREE.BufferGeometry();
+    pGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6), 3));
+    const pMat = new THREE.LineBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.3 });
+    projLine = new THREE.Line(pGeo, pMat); scene.add(projLine);
+  }
+
+  function updateTagPos3d() {
+    const p = p2t(S.dx, S.dy, S.dz);
+    tagMesh.position.set(p[0], p[1], p[2]);
+    tagGlow.position.set(p[0], p[1], p[2]);
+    const pos = projLine.geometry.attributes.position;
+    pos.setXYZ(0, p[0], p[1], p[2]);
+    pos.setXYZ(1, p[0], 0, p[2]);
+    pos.needsUpdate = true;
+  }
+
+  function buildTrail3d() {
+    const THREE = window.THREE;
+    const positions = new Float32Array(TRAIL3D_MAX * 3);
+    const colors = new Float32Array(TRAIL3D_MAX * 3);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geo.setDrawRange(0, 0);
+    const mat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 });
+    trailLine3d = new THREE.Line(geo, mat); scene.add(trailLine3d);
+  }
+
+  function updateTrail3d(now) {
+    if (S.connected) {
+      const p = p2t(S.dx, S.dy, S.dz);
+      trail3dData.push({ x: p[0], y: p[1], z: p[2], time: now });
+    }
+    const cut = now - TRAIL_MS;
+    while (trail3dData.length > 0 && trail3dData[0].time < cut) trail3dData.shift();
+    if (trail3dData.length > TRAIL3D_MAX) trail3dData.splice(0, trail3dData.length - TRAIL3D_MAX);
+    const n = trail3dData.length;
+    const pos = trailLine3d.geometry.attributes.position;
+    const col = trailLine3d.geometry.attributes.color;
+    for (let i = 0; i < n; i++) {
+      const d = trail3dData[i];
+      pos.setXYZ(i, d.x, d.y, d.z);
+      const fade = Math.pow(1 - (now - d.time) / TRAIL_MS, 1.5);
+      col.setXYZ(i, 0.31 * fade, 0.76 * fade, 0.97 * fade);
+    }
+    trailLine3d.geometry.setDrawRange(0, n);
+    pos.needsUpdate = true; col.needsUpdate = true;
+  }
+
+  function buildDistLines3d() {
+    const THREE = window.THREE;
+    for (let i = 0; i < 4; i++) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6), 3));
+      const mat = new THREE.LineBasicMaterial({ color: 0xe0c068, transparent: true, opacity: 0.4 });
+      const line = new THREE.Line(geo, mat); line.visible = false;
+      scene.add(line); distLineMeshes.push(line);
+    }
+  }
+
+  function updateDistLines3d() {
+    const tp = p2t(S.dx, S.dy, S.dz);
+    for (let i = 0; i < 4; i++) {
+      const a = S.anchors[i], ap = p2t(a[0], a[1], a[2]);
+      const pos = distLineMeshes[i].geometry.attributes.position;
+      pos.setXYZ(0, ap[0], ap[1], ap[2]);
+      pos.setXYZ(1, tp[0], tp[1], tp[2]);
+      pos.needsUpdate = true;
+      distLineMeshes[i].visible = showDistLines;
+    }
+  }
+
+  function updateScene3d(now) {
+    if (!scene) return;
+    updateAnchorPos3d();
+    updateTargetPos3d();
+    updateTagPos3d();
+    updateTrail3d(now);
+    updateDistLines3d();
+  }
+
+  function render3d(now) {
+    if (!renderer || !scene || !camera3d) return;
+    if (camAnim) {
+      const t = Math.min(1, (now - camAnim.start) / camAnim.duration);
+      const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+      camera3d.position.lerpVectors(camAnim.from, camAnim.to, ease);
+      controls3d.target.lerpVectors(camAnim.fromTarget, camAnim.toTarget, ease);
+      if (t >= 1) { const cb = camAnim.onComplete; camAnim = null; if (cb) cb(); }
+    }
+    controls3d.update();
+    updateScene3d(now);
+    renderer.render(scene, camera3d);
+  }
+
+  /* ---- 模式切换 ---- */
+  function switchTo3d() {
+    if (mode3d || camAnim) return;
+    loadThreeJS().then(() => {
+      mode3d = true;
+      document.getElementById('trailCanvas3d').style.display = 'block';
+      canvas.style.display = 'none';
+      renderer.setSize(W, H); renderer.setPixelRatio(dpr);
+      camera3d.position.set(2, 10, 2);
+      controls3d.target.set(2, 0, 2);
+      camAnim = {
+        from: new THREE.Vector3(2, 10, 2),
+        to: new THREE.Vector3(8, 6, 8),
+        fromTarget: new THREE.Vector3(2, 0, 2),
+        toTarget: new THREE.Vector3(2, 0, 2),
+        start: performance.now(), duration: 1000,
+        onComplete: () => { controls3d.enabled = true; }
+      };
+      updateModeSwitchUI();
+    }).catch(() => {
+      console.error('3D 模式加载失败，请检查网络连接');
+    });
+  }
+
+  function switchTo2d() {
+    if (!mode3d || camAnim) return;
+    controls3d.enabled = false;
+    camAnim = {
+      from: camera3d.position.clone(),
+      to: new THREE.Vector3(2, 10, 2),
+      fromTarget: controls3d.target.clone(),
+      toTarget: new THREE.Vector3(2, 0, 2),
+      start: performance.now(), duration: 1000,
+      onComplete: () => {
+        mode3d = false;
+        document.getElementById('trailCanvas3d').style.display = 'none';
+        canvas.style.display = 'block';
+        updateModeSwitchUI();
+      }
+    };
+  }
+
+  function updateModeSwitchUI() {
+    const sw = document.getElementById('modeSwitch');
+    const opts = sw.querySelectorAll('.mode-opt');
+    sw.setAttribute('data-mode', mode3d ? '3d' : '2d');
+    opts[0].classList.toggle('active', !mode3d);
+    opts[1].classList.toggle('active', mode3d);
   }
 
   /* ==========================================
      启动
      ========================================== */
   function init() {
-    new ResizeObserver(()=>resize()).observe(canvas); resize();
+    new ResizeObserver(()=>resize()).observe(document.body); resize();
+    // Canvas 拖拽事件
+    canvas.addEventListener('mousedown', onPointerDown);
+    canvas.addEventListener('mousemove', onPointerMove);
+    canvas.addEventListener('mouseup', onPointerUp);
+    canvas.addEventListener('mouseleave', onPointerUp);
     buildAnchors();
     setupTargetInputs();
     setupControls();
+    document.getElementById('btnReset').addEventListener('click', resetDefaults);
+
+    /* 模式切换 */
+    document.getElementById('modeSwitch').addEventListener('click', function(e) {
+      const opt = e.target.closest('.mode-opt');
+      if (!opt) return;
+      if (opt.dataset.mode === '3d' && !mode3d) switchTo3d();
+      else if (opt.dataset.mode === '2d' && mode3d) switchTo2d();
+    });
+
+    /* 测距连线开关 */
+    document.getElementById('showDistLines').addEventListener('change', function() {
+      showDistLines = this.checked;
+    });
+
     fetchSt();
     setInterval(fetchSt, 200);
     requestAnimationFrame(tick);
