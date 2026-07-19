@@ -437,6 +437,9 @@ def get_state_key(key):
         return jsonify({key: val.tolist()})
     return jsonify({key: val})
 
+@api_app.route("/api/location", methods=["GET"])
+def get_location():
+    return jsonify({"time": int(round(time.time() * 1000)), "x": state['x'], "y": state['y'], "z": state['z']})
 
 @api_app.route("/api/state", methods=["POST"])
 def set_state():
