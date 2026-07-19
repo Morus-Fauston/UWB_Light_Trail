@@ -3,186 +3,409 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UWB Light Trail — 动态二维尾迹</title>
+<title>UWB Light Trail — 地面站</title>
 <style>
-  /* =============================================
-     Fluent Design — 深色主题
-     ============================================= */
-  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+/* =============================================
+   Fluent Design — 深色主题
+   ============================================= */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-  :root {
-    --bg-dark:       #0a0e14;
-    --bg-panel:      rgba(32, 38, 48, 0.82);
-    --border-panel:  rgba(255,255,255,0.06);
-    --text-primary:  #e8eaed;
-    --text-secondary:#9aa0a6;
-    --accent:        #4fc3f7;
-    --accent-glow:   rgba(79, 195, 247, 0.35);
-    --grid-color:    rgba(255,255,255,0.07);
-    --grid-major:    rgba(255,255,255,0.12);
-    --anchor-color:  #5c6bc0;
-    --trail-color:   #4fc3f7;
-    --status-on:     #4caf50;
-    --status-off:    #f44336;
-    --font:          'Segoe UI', -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif;
-    --radius:        10px;
-    --acrylic-blur:  24px;
-  }
+:root {
+  --bg-dark:       #0a0e14;
+  --bg-panel:      rgba(32, 38, 48, 0.82);
+  --border-panel:  rgba(255,255,255,0.06);
+  --text-primary:  #e8eaed;
+  --text-secondary:#9aa0a6;
+  --accent:        #4fc3f7;
+  --accent-dim:    rgba(79,195,247,0.15);
+  --danger:        #f44336;
+  --danger-dim:    rgba(244,67,54,0.15);
+  --success:       #4caf50;
+  --success-dim:   rgba(76,175,80,0.15);
+  --warning:       #ff9800;
+  --anchor-color:  #5c6bc0;
+  --target-color:  #ff5722;
+  --font:          'Segoe UI', -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif;
+  --radius:        8px;
+  --acrylic-blur:  24px;
+  --panel-w:       260px;
+  --panel-gap:     10px;
+}
 
-  html, body {
-    width: 100%; height: 100%;
-    overflow: hidden;
-    background: var(--bg-dark);
-    font-family: var(--font);
-    color: var(--text-primary);
-    user-select: none;
-  }
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg-dark);
+  font-family: var(--font);
+  color: var(--text-primary);
+  user-select: none;
+}
 
-  /* ---- Canvas ---- */
-  #trailCanvas {
-    display: block;
-    width: 100%; height: 100%;
-    cursor: crosshair;
-  }
+/* ---- Canvas ---- */
+#trailCanvas {
+  display: block;
+  width: 100%; height: 100%;
+  cursor: crosshair;
+}
 
-  /* ---- 信息面板 (Fluent Acrylic) ---- */
-  #infoPanel {
-    position: fixed;
-    top: 20px; right: 20px;
-    min-width: 200px;
-    background: var(--bg-panel);
-    backdrop-filter: blur(var(--acrylic-blur));
-    -webkit-backdrop-filter: blur(var(--acrylic-blur));
-    border: 1px solid var(--border-panel);
-    border-radius: var(--radius);
-    padding: 18px 22px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
-    transition: opacity 0.25s ease;
-    pointer-events: none;
-    z-index: 10;
-  }
-  #infoPanel h2 {
-    font-size: 13px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1.2px;
-    color: var(--text-secondary);
-    margin-bottom: 10px;
-  }
-  #infoPanel .row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 3px 0;
-    font-size: 14px;
-  }
-  #infoPanel .row .label { color: var(--text-secondary); }
-  #infoPanel .row .value {
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.3px;
-  }
-  #infoPanel .row .value.accent { color: var(--accent); }
-  #infoPanel .divider {
-    height: 1px;
-    background: var(--border-panel);
-    margin: 8px 0;
-  }
-  #statusDot {
-    display: inline-block;
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    margin-right: 8px;
-    transition: background 0.3s ease;
-    box-shadow: 0 0 6px var(--status-on);
-    vertical-align: middle;
-  }
-  #statusDot.on  { background: var(--status-on); box-shadow: 0 0 6px var(--status-on); }
-  #statusDot.off { background: var(--status-off); box-shadow: 0 0 6px var(--status-off); }
-  #statusText {
-    font-size: 12px;
-    font-weight: 500;
-    vertical-align: middle;
-  }
+/* =============================================
+   左侧面板容器
+   ============================================= */
+#leftContainer {
+  position: fixed;
+  top: 56px; left: 10px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: var(--panel-gap);
+  pointer-events: none;
+}
+#leftContainer > * { pointer-events: auto; }
 
-  /* ---- 左上角标题 ---- */
-  #titleBar {
-    position: fixed;
-    top: 20px; left: 20px;
-    z-index: 10;
-    pointer-events: none;
-  }
-  #titleBar h1 {
-    font-size: 18px;
-    font-weight: 300;
-    letter-spacing: 1px;
-    color: var(--text-secondary);
-  }
-  #titleBar h1 strong {
-    font-weight: 600;
-    color: var(--text-primary);
-  }
+/* ---- 可折叠面板通用 ---- */
+.collapsible-panel {
+  background: var(--bg-panel);
+  backdrop-filter: blur(var(--acrylic-blur));
+  -webkit-backdrop-filter: blur(var(--acrylic-blur));
+  border: 1px solid var(--border-panel);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  width: var(--panel-w);
+  min-width: 0;
+  flex-shrink: 0;
+}
 
-  /* ---- 底部状态栏 ---- */
-  #statusBar {
-    position: fixed;
-    bottom: 20px; left: 50%;
-    transform: translateX(-50%);
-    background: var(--bg-panel);
-    backdrop-filter: blur(var(--acrylic-blur));
-    -webkit-backdrop-filter: blur(var(--acrylic-blur));
-    border: 1px solid var(--border-panel);
-    border-radius: calc(var(--radius) * 0.7);
-    padding: 6px 18px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    letter-spacing: 0.5px;
-    z-index: 10;
-    pointer-events: none;
-    white-space: nowrap;
-  }
-  #statusBar .sep { margin: 0 10px; opacity: 0.3; }
+.collapsible-panel.collapsed { width: 36px; }
+
+/* ---- 面板头部 ---- */
+.panel-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 8px 0 36px;
+  cursor: pointer;
+  gap: 6px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-panel);
+}
+.collapsible-panel.collapsed .panel-header { border-bottom-color: transparent; }
+.collapsible-panel.collapsed .panel-header .panel-title { display: none; }
+.panel-header .toggle-btn {
+  position: absolute;
+  left: 8px; top: 8px;
+  width: 20px; height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
+}
+.collapsible-panel.collapsed .panel-header .toggle-btn {
+  transform: rotate(180deg);
+}
+.panel-header .panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* ---- 面板内容 ---- */
+.panel-body {
+  width: 260px;
+  padding: 10px 12px 12px;
+  overflow-y: auto;
+  max-height: 600px;
+}
+.collapsible-panel.collapsed .panel-body {
+  max-height: 0;
+  padding: 0 12px;
+  overflow: hidden;
+}
+
+/* =============================================
+   控件通用样式
+   ============================================= */
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+.field-row .flabel { color: var(--text-secondary); white-space: nowrap; min-width: 20px; }
+.field-row input[type="number"] {
+  width: 48px;
+  padding: 2px 4px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 11px;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.field-row input:focus { border-color: var(--accent); }
+.field-row input.offs { width: 48px; color: var(--warning); }
+.section-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  margin: 6px 0 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+.section-title:first-child { border-top: none; margin-top: 0; }
+.anchor-block {
+  margin-bottom: 3px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.02);
+}
+.anchor-block .alabel { color: var(--anchor-color); font-weight: 600; font-size: 11px; min-width: 18px; }
+
+/* 基站输入列标题 */
+.anchor-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.anchor-header .hblank { min-width: 18px; }
+.anchor-header .hxyz { flex: 1; display: flex; gap: 4px; }
+.anchor-header .hxyz span { width: 48px; text-align: center; }
+.anchor-header .hoff { width: 48px; text-align: center; }
+
+/* ---- 按钮 ---- */
+.btn-ctrl {
+  display: block;
+  width: 100%;
+  padding: 8px 0;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: background 0.25s, box-shadow 0.25s, transform 0.1s;
+  margin-bottom: 6px;
+}
+.btn-ctrl:active { transform: scale(0.97); }
+.btn-arm-off  { background: var(--danger-dim); color: var(--danger);  border: 1px solid rgba(244,67,54,0.3); }
+.btn-arm-on   { background: var(--success-dim); color: var(--success); border: 1px solid rgba(76,175,80,0.3); }
+.btn-auto-off { background: var(--danger-dim); color: var(--danger);  border: 1px solid rgba(244,67,54,0.3); }
+.btn-auto-on  { background: var(--success-dim); color: var(--success); border: 1px solid rgba(76,175,80,0.3); }
+
+/* ---- 油门 ---- */
+.thr-container { margin-top: 2px; }
+.thr-container .thr-label {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;
+}
+.thr-container input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.12); outline: none;
+}
+.thr-container input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); cursor: pointer;
+  box-shadow: 0 0 8px rgba(79,195,247,0.4);
+}
+.thr-container input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); cursor: pointer; border: none;
+}
+.thr-value { font-size: 13px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+/* =============================================
+   右上信息面板
+   ============================================= */
+#infoPanel {
+  position: fixed;
+  top: 10px; right: 10px;
+  width: 185px;
+  background: var(--bg-panel);
+  backdrop-filter: blur(var(--acrylic-blur));
+  -webkit-backdrop-filter: blur(var(--acrylic-blur));
+  border: 1px solid var(--border-panel);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* XYZ 同行 */
+.xyz-row {
+  display: flex; justify-content: space-between; gap: 6px; margin-bottom: 6px;
+}
+.xyz-item { text-align: center; flex: 1; }
+.xyz-item .xyz-label {
+  font-size: 9px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--text-secondary);
+}
+.xyz-item .xyz-value {
+  font-size: 16px; font-weight: 700; color: var(--accent);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.3px; line-height: 1.3;
+}
+.info-divider { height: 1px; background: var(--border-panel); margin: 5px 0; }
+
+/* RC */
+.rc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 10px; }
+.rc-item { display: flex; justify-content: space-between; font-size: 11px; padding: 1px 0; }
+.rc-item .rlab { color: var(--text-secondary); }
+.rc-item .rval { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+
+/* 距离 */
+.dist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 10px; }
+.dist-item { display: flex; justify-content: space-between; font-size: 11px; padding: 1px 0; }
+.dist-item .dlab { color: var(--text-secondary); }
+.dist-item .dval { font-weight: 600; font-variant-numeric: tabular-nums; color: #e0c068; }
+
+/* 状态 */
+.status-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+#statusDot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+#statusDot.on  { background: var(--success); box-shadow: 0 0 5px var(--success); }
+#statusDot.off { background: var(--danger);  box-shadow: 0 0 5px var(--danger);  }
+#statusText { font-size: 11px; font-weight: 500; color: var(--text-secondary); }
+
+/* ---- 左上标题 ---- */
+#titleBar {
+  position: fixed; top: 14px; left: 16px;
+  z-index: 25; pointer-events: none;
+}
+#titleBar h1 {
+  font-size: 26px; font-weight: 200; letter-spacing: 3px;
+  color: rgba(255,255,255,0.55); text-transform: uppercase;
+}
+#titleBar h1 strong { font-weight: 700; color: rgba(255,255,255,0.8); }
+
+/* ---- 底部状态栏 ---- */
+#statusBar {
+  position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
+  background: var(--bg-panel);
+  backdrop-filter: blur(var(--acrylic-blur));
+  -webkit-backdrop-filter: blur(var(--acrylic-blur));
+  border: 1px solid var(--border-panel);
+  border-radius: 6px;
+  padding: 4px 14px;
+  font-size: 11px; color: var(--text-secondary);
+  z-index: 10; pointer-events: none; white-space: nowrap; letter-spacing: 0.3px;
+}
+#statusBar .sep { margin: 0 8px; opacity: 0.3; }
 </style>
 </head>
 <body>
 
-<!-- 标题 -->
-<div id="titleBar">
-  <h1><strong>UWB</strong> Light Trail</h1>
+<div id="titleBar"><h1><strong>UWB</strong> Light Trail</h1></div>
+
+<!-- =============================================
+     左侧面板
+     ============================================= -->
+<div id="leftContainer">
+
+  <!-- █ 校准组 -->
+  <div class="collapsible-panel" id="calibPanel">
+    <div class="panel-header" onclick="togglePanel('calibPanel')">
+      <span class="toggle-btn">&#9664;</span>
+      <span class="panel-title">校准</span>
+    </div>
+    <div class="panel-body">
+      <div class="section-title">目标点</div>
+      <div class="field-row">
+        <span class="flabel">X</span>
+        <input type="number" id="tgtX" step="0.1" value="2.0">
+        <span class="flabel" style="margin-left:4px">Y</span>
+        <input type="number" id="tgtY" step="0.1" value="2.0">
+        <span class="flabel" style="margin-left:4px">Z</span>
+        <input type="number" id="tgtZ" step="0.1" value="1.0">
+      </div>
+      <div class="section-title">基站 &amp; 误差修正</div>
+      <div class="anchor-header">
+        <span class="hblank"></span>
+        <div class="hxyz"><span>X</span><span>Y</span><span>Z</span></div>
+        <span class="hoff">偏移</span>
+      </div>
+      <div id="anchorInputs"></div>
+    </div>
+  </div>
+
+  <!-- █ 控制组 -->
+  <div class="collapsible-panel" id="ctrlPanel">
+    <div class="panel-header" onclick="togglePanel('ctrlPanel')">
+      <span class="toggle-btn">&#9664;</span>
+      <span class="panel-title">控制</span>
+    </div>
+    <div class="panel-body">
+      <button class="btn-ctrl btn-arm-off" id="btnArm">解锁</button>
+      <button class="btn-ctrl btn-auto-off" id="btnAuto" disabled>自动驾驶</button>
+      <div class="section-title" style="margin-top:8px">悬停油门</div>
+      <div class="thr-container">
+        <div class="thr-label">
+          <span>基准</span>
+          <span class="thr-value" id="thrDisplay">1300</span>
+        </div>
+        <input type="range" id="thrSlider" min="1000" max="2000" value="1300">
+      </div>
+    </div>
+  </div>
 </div>
 
-<!-- 信息面板 -->
+<!-- =============================================
+     右上信息面板
+     ============================================= -->
 <div id="infoPanel">
-  <h2>📍 实时位置</h2>
-  <div class="row">
-    <span class="label">X</span>
-    <span class="value accent" id="valX">—</span>
+  <div class="xyz-row">
+    <div class="xyz-item"><div class="xyz-label">X</div><div class="xyz-value" id="valX">—</div></div>
+    <div class="xyz-item"><div class="xyz-label">Y</div><div class="xyz-value" id="valY">—</div></div>
+    <div class="xyz-item"><div class="xyz-label">Z</div><div class="xyz-value" id="valZ">—</div></div>
   </div>
-  <div class="row">
-    <span class="label">Y</span>
-    <span class="value accent" id="valY">—</span>
+  <div class="info-divider"></div>
+  <div class="rc-grid">
+    <div class="rc-item"><span class="rlab">Roll</span><span class="rval" id="rcRoll">1500</span></div>
+    <div class="rc-item"><span class="rlab">Pitch</span><span class="rval" id="rcPitch">1500</span></div>
+    <div class="rc-item"><span class="rlab">Yaw</span><span class="rval" id="rcYaw">1500</span></div>
+    <div class="rc-item"><span class="rlab">Throttle</span><span class="rval" id="rcThrottle">1000</span></div>
   </div>
-  <div class="row">
-    <span class="label">Z</span>
-    <span class="value accent" id="valZ">—</span>
+  <div class="info-divider"></div>
+  <div class="dist-grid">
+    <div class="dist-item"><span class="dlab">Δ0</span><span class="dval" id="d0">—</span></div>
+    <div class="dist-item"><span class="dlab">Δ1</span><span class="dval" id="d1">—</span></div>
+    <div class="dist-item"><span class="dlab">Δ2</span><span class="dval" id="d2">—</span></div>
+    <div class="dist-item"><span class="dlab">Δ3</span><span class="dval" id="d3">—</span></div>
   </div>
-  <div class="divider"></div>
-  <div class="row">
-    <span class="label">▼ 时间</span>
-    <span class="value" id="valTime" style="font-size:12px;color:var(--text-secondary);">—</span>
-  </div>
-  <div class="divider"></div>
-  <div class="row">
+  <div class="info-divider"></div>
+  <div class="status-row">
     <span id="statusDot" class="off"></span>
     <span id="statusText">等待数据…</span>
   </div>
 </div>
 
-<!-- 底部状态 -->
+<!-- 底部 -->
 <div id="statusBar">
   <span id="fpsDisplay">0 FPS</span>
-  <span class="sep">|</span>
-  <span>更新 4.9 Hz</span>
   <span class="sep">|</span>
   <span id="trailPoints">尾迹 0 点</span>
 </div>
@@ -192,402 +415,367 @@
 
 <script>
 // =============================================
-//  UWB Light Trail — 引擎
+//  UWB Light Trail — 地面站引擎
 // =============================================
 
 (function() {
   'use strict';
 
-  /* ---- DOM refs ---- */
+  /* ---- DOM ---- */
   const canvas = document.getElementById('trailCanvas');
   const ctx = canvas.getContext('2d');
 
-  const elX = document.getElementById('valX');
-  const elY = document.getElementById('valY');
-  const elZ = document.getElementById('valZ');
-  const elTime = document.getElementById('valTime');
-  const elStatusDot = document.getElementById('statusDot');
-  const elStatusText = document.getElementById('statusText');
-  const elFps = document.getElementById('fpsDisplay');
+  const elX        = document.getElementById('valX');
+  const elY        = document.getElementById('valY');
+  const elZ        = document.getElementById('valZ');
+  const elDot      = document.getElementById('statusDot');
+  const elStatTx   = document.getElementById('statusText');
+  const elFps      = document.getElementById('fpsDisplay');
   const elTrailPts = document.getElementById('trailPoints');
+  const elBtnArm   = document.getElementById('btnArm');
+  const elBtnAuto  = document.getElementById('btnAuto');
+  const elThrSld   = document.getElementById('thrSlider');
+  const elThrDsp   = document.getElementById('thrDisplay');
 
-  /* ---- 坐标系 ---- */
-  const RANGE_MIN = -1;
-  const RANGE_MAX = 6;
-  const RANGE_SIZE = RANGE_MAX - RANGE_MIN;  // 7
+  /* ---- 坐标 ---- */
+  const RMIN = -1, RMAX = 6, RSIZE = RMAX - RMIN;
 
   /* ---- 状态 ---- */
-  const state = {
-    // 平滑插值
-    displayX: 0, displayY: 0,
-    targetX: 0, targetY: 0,
-    targetZ: 0,
-    // 时间戳
-    lastUpdate: 0,
-    lastFetchTime: 0,
-    // 基站 (锚点)
-    anchors: [
-      [0.0, 0.0], [0.0, 4.0],
-      [4.0, 4.0], [4.0, 0.0]
-    ],
-    // 连接状态
+  const S = {
+    dx: 0, dy: 0,
+    sx: 0, sy: 0, sz: 0,
+    tx: 2.0, ty: 2.0, tz: 1.0,
+    fetchT: 0,
+    rcR:1500, rcP:1500, rcY:1500, rcT:1000,
+    r0:0,r1:0,r2:0,r3:0,
+    armed: false, auto: false,
+    thr: 1300,
+    anchors: [[0,0,0.5],[0,4,2.5],[4,4,0.5],[4,0,2.5]],
+    off: [0,0,0,0],
     connected: false,
-    // FPS
-    frameCount: 0,
-    fpsTime: 0,
-    fps: 0,
+    fc:0, ft:0, fps:0,
   };
 
-  /* ---- 尾迹 ---- */
-  const TRAIL_DURATION = 2000;  // 2 秒
+  const TRAIL_MS = 2000;
   let trail = [];
 
-  /* ---- 缩放缓存在变化时重新计算 ---- */
-  let dpr = 1;
-  let W = 0, H = 0;
-  let pad = { top: 60, bottom: 40, left: 60, right: 30 };
-  let plotX = 0, plotY = 0, plotW = 0, plotH = 0;
-  let scale = 1;
+  let dpr=1, W=0, H=0;
+  const PAD = {t:50,b:30,l:50,r:20};
+  let px=0, py=0, pw=0, ph=0, sc=1;
 
   /* ==========================================
-     尺寸 / 像素比适配
+     尺寸
      ========================================== */
   function resize() {
     dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    W = rect.width;
-    H = rect.height;
-    canvas.width = W * dpr;
-    canvas.height = H * dpr;
-    ctx.scale(dpr, dpr);
-
-    pad = { top: 60, bottom: 40, left: 60, right: 30 };
-    plotX = pad.left;
-    plotY = pad.top;
-    plotW = W - pad.left - pad.right;
-    plotH = H - pad.top - pad.bottom;
-    scale = Math.min(plotW, plotH) / RANGE_SIZE;
+    const r = canvas.getBoundingClientRect();
+    W = r.width; H = r.height;
+    canvas.width = W*dpr; canvas.height = H*dpr;
+    ctx.scale(dpr,dpr);
+    px=PAD.l; py=PAD.t; pw=W-PAD.l-PAD.r; ph=H-PAD.t-PAD.b;
+    sc = Math.min(pw,ph)/RSIZE;
   }
 
-  /* ---- 坐标转换 ---- */
-  function toCanvas(rx, ry) {
-    const cx = plotX + (rx - RANGE_MIN) * scale + (plotW - scale * RANGE_SIZE) / 2;
-    const cy = plotY + (RANGE_MAX - ry) * scale + (plotH - scale * RANGE_SIZE) / 2;
-    return { x: cx, y: cy };
+  function toC(rx,ry) {
+    return {
+      x: px + (rx-RMIN)*sc + (pw-sc*RSIZE)/2,
+      y: py + (RMAX-ry)*sc + (ph-sc*RSIZE)/2
+    };
   }
 
   /* ==========================================
-     数据拉取
+     数据
      ========================================== */
-  async function fetchLocation() {
+  async function fetchSt() {
     try {
-      const resp = await fetch('http://127.0.0.1:5000/api/location');
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      state.targetX = data.x;
-      state.targetY = data.y;
-      state.targetZ = data.z;
-      state.lastUpdate = data.time;
-      state.lastFetchTime = performance.now();
-      if (!state.connected) {
-        state.connected = true;
-        updateStatusUI();
+      const r = await fetch('/api/state');
+      if (!r.ok) throw Error();
+      const d = await r.json();
+      S.sx=d.x; S.sy=d.y; S.sz=d.z;
+      S.tx=d.target_x; S.ty=d.target_y; S.tz=d.target_z;
+      S.rcR=d.rc_roll; S.rcP=d.rc_pitch; S.rcY=d.rc_yaw; S.rcT=d.rc_throttle;
+      S.r0=d.r0; S.r1=d.r1; S.r2=d.r2; S.r3=d.r3;
+      S.armed=d.is_armed; S.auto=d.auto_mode;
+      S.thr = d.throttle;
+      if (d.anchors) S.anchors = d.anchors;
+      S.off = [d.offset_r0,d.offset_r1,d.offset_r2,d.offset_r3];
+      S.fetchT = performance.now();
+      if (!S.connected) {
+        S.connected=true;
+        // 首次连接时用后端值初始化目标输入框
+        document.getElementById('tgtX').value = S.tx.toFixed(1);
+        document.getElementById('tgtY').value = S.ty.toFixed(1);
+        document.getElementById('tgtZ').value = S.tz.toFixed(1);
+        updateUI();
       }
-    } catch (err) {
-      if (state.connected) {
-        state.connected = false;
-        updateStatusUI();
-      }
+      syncArmUI(); syncAutoUI(); syncAutoEnabled();
+      elThrSld.value = S.thr;
+      elThrDsp.textContent = S.thr;
+    } catch(_) {
+      if (S.connected) { S.connected=false; updateUI(); }
     }
   }
 
-  async function fetchAnchors() {
-    try {
-      const resp = await fetch('http://127.0.0.1:5000/api/state/anchors');
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      if (data && data.anchors && Array.isArray(data.anchors)) {
-        state.anchors = data.anchors.map(a => [a[0], a[1]]);
-      }
-    } catch (_) { /* 使用默认锚点 */ }
+  async function postSt(p) {
+    try { await fetch('/api/state', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(p) }); }
+    catch(_) {}
   }
 
-  function updateStatusUI() {
-    if (state.connected) {
-      elStatusDot.className = 'on';
-      elStatusText.textContent = '已连接';
-    } else {
-      elStatusDot.className = 'off';
-      elStatusText.textContent = '连接断开';
+  /* ==========================================
+     面板控件
+     ========================================== */
+  window.togglePanel = function(id) {
+    document.getElementById(id).classList.toggle('collapsed');
+  };
+
+  function buildAnchors() {
+    const c = document.getElementById('anchorInputs');
+    c.innerHTML = '';
+    for (let i=0;i<4;i++) {
+      const d = document.createElement('div');
+      d.className = 'anchor-block';
+      d.innerHTML =
+        `<div class="field-row">` +
+        `<span class="alabel">A${i}</span>` +
+        `<input type="number" step="0.1" value="${S.anchors[i][0]}" data-xyza="${i},0">` +
+        `<input type="number" step="0.1" value="${S.anchors[i][1]}" data-xyza="${i},1">` +
+        `<input type="number" step="0.1" value="${S.anchors[i][2]}" data-xyza="${i},2">` +
+        `<input type="number" step="0.01" class="offs" value="${S.off[i]}" data-off="${i}">` +
+        `</div>`;
+      d.querySelectorAll('[data-xyza]').forEach(el => {
+        el.addEventListener('change', function() {
+          const [ai,aj] = this.dataset.xyza.split(',').map(Number);
+          S.anchors[ai][aj] = parseFloat(this.value)||0;
+          postSt({ anchors: S.anchors.map(a=>[a[0],a[1],a[2]]) });
+        });
+      });
+      d.querySelectorAll('[data-off]').forEach(el => {
+        el.addEventListener('change', function() {
+          const idx = Number(this.dataset.off);
+          S.off[idx] = parseFloat(this.value)||0;
+          const p = {}; p['offset_r'+idx] = S.off[idx]; postSt(p);
+        });
+      });
+      c.appendChild(d);
     }
   }
 
-  /* ---- 定时拉取 (100ms) ---- */
-  let fetchTimer = 0;
-  function scheduleFetch() {
-    fetchTimer = setInterval(fetchLocation, 100);
-    fetchLocation(); // 立即拉一次
+  /* 目标 */
+  function setupTargetInputs() {
+    ['tgtX','tgtY','tgtZ'].forEach(id => {
+      document.getElementById(id).addEventListener('change', function() {
+        const k = this.id.replace('tgt','target_').toLowerCase();
+        const v = parseFloat(this.value)||0;
+        const p = {}; p[k] = v; postSt(p);
+      });
+    });
+  }
+
+  /* 控制 */
+  function setupControls() {
+    elBtnArm.addEventListener('click', function() {
+      if (!S.armed && S.thr > 1050) return;
+      if (S.armed) {
+        // 锁定：与旧GUI保持一致——关闭自动驾驶、手动油门归零
+        postSt({ is_armed: false, auto_mode: false, throttle: 1000 });
+        S.armed = false;
+        S.auto = false;
+        S.thr = 1000;
+        elThrSld.value = 1000;
+        elThrDsp.textContent = '1000';
+        syncAutoUI();
+      } else {
+        // 解锁：油门必须 <= 1050
+        if (S.thr > 1050) return;
+        postSt({ is_armed: true });
+        S.armed = true;
+      }
+      syncArmUI(); syncAutoEnabled();
+    });
+    elBtnAuto.addEventListener('click', function() {
+      if (!S.armed) return;
+      const nv = !S.auto;
+      postSt({ auto_mode: nv });
+      S.auto = nv;
+      syncAutoUI();
+    });
+    elThrSld.addEventListener('input', function() {
+      const v = parseInt(this.value);
+      S.thr = v; elThrDsp.textContent = v;
+      postSt({ throttle: v });
+    });
+  }
+
+  /* ==========================================
+     UI 同步
+     ========================================== */
+  function syncUI() {
+    elThrSld.value = S.thr; elThrDsp.textContent = S.thr;
+    syncArmUI(); syncAutoUI(); syncAutoEnabled();
+    if (S.connected) { elDot.className='on'; elStatTx.textContent='已连接'; syncAutoEnabled(); }
+    else { elDot.className='off'; elStatTx.textContent='连接断开'; }
+  }
+
+  function syncArmUI() {
+    if (S.armed) { elBtnArm.className='btn-ctrl btn-arm-on'; elBtnArm.textContent='锁定'; }
+    else { elBtnArm.className='btn-ctrl btn-arm-off'; elBtnArm.textContent='解锁'; }
+  }
+
+  function syncAutoUI() {
+    if (S.auto) { elBtnAuto.className='btn-ctrl btn-auto-on'; elBtnAuto.textContent='关闭自动驾驶'; }
+    else { elBtnAuto.className='btn-ctrl btn-auto-off'; elBtnAuto.textContent='开启自动驾驶'; }
+  }
+
+  function syncAutoEnabled() {
+    elBtnAuto.disabled = !S.armed;
+    elBtnAuto.style.opacity = S.armed?'1':'0.35';
+  }
+
+  function updateUI() {
+    if (S.connected) { elDot.className='on'; elStatTx.textContent='已连接'; }
+    else { elDot.className='off'; elStatTx.textContent='连接断开'; }
   }
 
   /* ==========================================
      绘图
      ========================================== */
-  function draw() {
-    const now = performance.now();
-
-    // ---- 清空 ----
-    ctx.clearRect(0, 0, W, H);
-
-    // ---- 背景 ----
-    ctx.fillStyle = '#0a0e14';
-    ctx.fillRect(0, 0, W, H);
+  function draw(now) {
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#0a0e14'; ctx.fillRect(0,0,W,H);
 
     drawGrid();
     drawAnchors();
+    drawTarget();
     drawTrail(now);
-    drawSphere(now);
+    drawSphere();
 
-    // ---- 信息面板更新 ----
-    if (state.connected) {
-      const elapsed = (now - state.lastFetchTime) / 1000;
-      elX.textContent = state.displayX.toFixed(2) + ' m';
-      elY.textContent = state.displayY.toFixed(2) + ' m';
-      elZ.textContent = state.targetZ.toFixed(2) + ' m';
-      if (state.lastUpdate) {
-        const d = new Date(state.lastUpdate);
-        elTime.textContent = d.toLocaleTimeString('zh-CN', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3,'0');
-      }
+    if (S.connected) {
+      elX.textContent = S.sx.toFixed(2)+' m';
+      elY.textContent = S.sy.toFixed(2)+' m';
+      elZ.textContent = S.sz.toFixed(2)+' m';
+      document.getElementById('rcRoll').textContent = S.rcR;
+      document.getElementById('rcPitch').textContent = S.rcP;
+      document.getElementById('rcYaw').textContent = S.rcY;
+      document.getElementById('rcThrottle').textContent = Math.round(S.rcT);
+      document.getElementById('d0').textContent = S.r0.toFixed(2)+' m';
+      document.getElementById('d1').textContent = S.r1.toFixed(2)+' m';
+      document.getElementById('d2').textContent = S.r2.toFixed(2)+' m';
+      document.getElementById('d3').textContent = S.r3.toFixed(2)+' m';
     }
 
-    // ---- FPS ----
-    state.frameCount++;
-    if (now - state.fpsTime >= 1000) {
-      state.fps = state.frameCount;
-      state.frameCount = 0;
-      state.fpsTime = now;
-      elFps.textContent = state.fps + ' FPS';
-    }
-    elTrailPts.textContent = '尾迹 ' + trail.length + ' 点';
+    S.fc++;
+    if (now-S.ft>=1000) { S.fps=S.fc; S.fc=0; S.ft=now; elFps.textContent=S.fps+' FPS'; }
+    elTrailPts.textContent='尾迹 '+trail.length+' 点';
   }
 
-  /* ---- 网格 ---- */
   function drawGrid() {
     ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.lineWidth = 1;
-    ctx.font = '11px ' + getComputedStyle(document.body).fontFamily;
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-
-    for (let v = RANGE_MIN; v <= RANGE_MAX; v++) {
-      const p = toCanvas(v, 0);
-
-      // 竖线
-      ctx.beginPath();
-      ctx.moveTo(p.x, plotY);
-      ctx.lineTo(p.x, plotY + plotH);
-      ctx.stroke();
-
-      // X 轴标签
-      ctx.fillText(v.toFixed(0), p.x, plotY + plotH + 8);
-
-      // 横线
-      ctx.beginPath();
-      ctx.moveTo(plotX, p.y);
-      ctx.lineTo(plotX + plotW, p.y);
-      ctx.stroke();
-
-      // Y 轴标签
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(v.toFixed(0), plotX - 8, p.y);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
+    ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=1;
+    const f='10px '+getComputedStyle(document.body).fontFamily;
+    ctx.font=f; ctx.fillStyle='rgba(255,255,255,0.22)';
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    for (let v=RMIN;v<=RMAX;v++) {
+      const p=toC(v,0);
+      ctx.beginPath();ctx.moveTo(p.x,py);ctx.lineTo(p.x,py+ph);ctx.stroke();
+      ctx.fillText(v.toFixed(0),p.x,py+ph+6);
+      ctx.beginPath();ctx.moveTo(px,p.y);ctx.lineTo(px+pw,p.y);ctx.stroke();
+      ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText(v.toFixed(0),px-6,p.y);
+      ctx.textAlign='center';ctx.textBaseline='top';
     }
-
-    // 坐标轴加粗
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = 1.5;
-    const o = toCanvas(0, 0);
-    ctx.beginPath(); ctx.moveTo(plotX, o.y); ctx.lineTo(plotX + plotW, o.y); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(o.x, plotY); ctx.lineTo(o.x, plotY + plotH); ctx.stroke();
-
-    // 轴标签
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = '12px ' + getComputedStyle(document.body).fontFamily;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillText('X', plotX + plotW + 4, o.y - 6);
-    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-    ctx.fillText('Y', o.x - 8, plotY - 4);
-
-    // 原点标签
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.font = '10px ' + getComputedStyle(document.body).fontFamily;
-    ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-    ctx.fillText('(0,0)', o.x - 4, o.y + 4);
-
+    ctx.strokeStyle='rgba(255,255,255,0.1)';ctx.lineWidth=1.2;
+    const o=toC(0,0);
+    ctx.beginPath();ctx.moveTo(px,o.y);ctx.lineTo(px+pw,o.y);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(o.x,py);ctx.lineTo(o.x,py+ph);ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.25)';ctx.font=f;
+    ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText('X',px+pw+3,o.y-5);
+    ctx.textAlign='right';ctx.textBaseline='bottom';ctx.fillText('Y',o.x-5,py-3);
+    ctx.fillStyle='rgba(255,255,255,0.12)';ctx.font='9px '+getComputedStyle(document.body).fontFamily;
+    ctx.textAlign='right';ctx.textBaseline='top';ctx.fillText('(0,0)',o.x-3,o.y+3);
     ctx.restore();
   }
 
-  /* ---- 基站 ---- */
   function drawAnchors() {
-    const labels = ['A0', 'A1', 'A2', 'A3'];
-    state.anchors.forEach((pos, i) => {
-      const p = toCanvas(pos[0], pos[1]);
-      if (p.x < plotX - 20 || p.x > plotX + plotW + 20 ||
-          p.y < plotY - 20 || p.y > plotY + plotH + 20) return;
-
+    const lb=['A0','A1','A2','A3'];
+    S.anchors.forEach((p,i)=>{
+      const c=toC(p[0],p[1]);
+      if (c.x<px-20||c.x>px+pw+20||c.y<py-20||c.y>py+ph+20) return;
       ctx.save();
-
-      // 发光外圈
-      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 18);
-      grad.addColorStop(0, 'rgba(92, 107, 192, 0.25)');
-      grad.addColorStop(1, 'rgba(92, 107, 192, 0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath(); ctx.arc(p.x, p.y, 18, 0, Math.PI * 2); ctx.fill();
-
-      // 方块
-      const sz = 10;
-      ctx.fillStyle = '#5c6bc0';
-      ctx.shadowColor = 'rgba(92,107,192,0.5)';
-      ctx.shadowBlur = 8;
-      ctx.fillRect(p.x - sz/2, p.y - sz/2, sz, sz);
-      ctx.shadowBlur = 0;
-
-      // 标签
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.font = '11px ' + getComputedStyle(document.body).fontFamily;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText(labels[i], p.x, p.y - sz/2 - 4);
-
+      const g=ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,16);
+      g.addColorStop(0,'rgba(92,107,192,0.2)');g.addColorStop(1,'rgba(92,107,192,0)');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(c.x,c.y,16,0,Math.PI*2);ctx.fill();
+      const sz=9;ctx.fillStyle='#5c6bc0';ctx.shadowColor='rgba(92,107,192,0.4)';ctx.shadowBlur=6;
+      ctx.fillRect(c.x-sz/2,c.y-sz/2,sz,sz);ctx.shadowBlur=0;
+      ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='10px '+getComputedStyle(document.body).fontFamily;
+      ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(lb[i],c.x,c.y-sz/2-3);
       ctx.restore();
     });
   }
 
-  /* ---- 尾迹 ---- */
-  function drawTrail(now) {
-    const len = trail.length;
-    if (len < 2) return;
-
+  function drawTarget() {
+    const tx=S.tx||2, ty=S.ty||2;
+    const c=toC(tx,ty);
+    if (c.x<px-30||c.x>px+pw+30||c.y<py-30||c.y>py+ph+30) return;
     ctx.save();
-
-    // 每个 segment 单独绘制以实现渐变
-    for (let i = 1; i < len; i++) {
-      const p0 = trail[i - 1];
-      const p1 = trail[i];
-      const age = now - p1.time;
-      const t = Math.max(0, Math.min(1, age / TRAIL_DURATION)); // 0 = 最新, 1 = 最老
-
-      // 渐细渐透明
-      const alpha = Math.pow(1 - t, 1.5);
-      const width = Math.pow(1 - t, 1.8) * 8;
-
-      if (width < 0.5 || alpha < 0.01) continue;
-
-      ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      ctx.lineTo(p1.x, p1.y);
-      ctx.strokeStyle = `rgba(79, 195, 247, ${alpha})`;
-      ctx.lineWidth = width;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.stroke();
+    const g=ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,22);
+    g.addColorStop(0,'rgba(255,87,34,0.2)');g.addColorStop(1,'rgba(255,87,34,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(c.x,c.y,22,0,Math.PI*2);ctx.fill();
+    const rO=11,rI=5;
+    ctx.beginPath();
+    for (let i=0;i<10;i++) {
+      const a=-Math.PI/2+i*Math.PI/5, rr=i%2===0?rO:rI;
+      const x=c.x+rr*Math.cos(a), y=c.y+rr*Math.sin(a);
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
     }
-
+    ctx.closePath();ctx.shadowColor='rgba(255,87,34,0.5)';ctx.shadowBlur=10;
+    ctx.fillStyle='#ff5722';ctx.fill();ctx.shadowBlur=0;
     ctx.restore();
   }
 
-  /* ---- 球体 ---- */
-  function drawSphere(now) {
-    const p = toCanvas(state.displayX, state.displayY);
-    if (p.x < plotX - 50 || p.x > plotX + plotW + 50 ||
-        p.y < plotY - 50 || p.y > plotY + plotH + 50) return;
+  function drawTrail(now) {
+    const n=trail.length; if (n<2) return; ctx.save();
+    for (let i=1;i<n;i++) {
+      const p0=trail[i-1],p1=trail[i], age=now-p1.time, t=Math.max(0,Math.min(1,age/TRAIL_MS));
+      const a=Math.pow(1-t,1.5), w=Math.pow(1-t,1.8)*7;
+      if (w<0.4||a<0.01) continue;
+      ctx.beginPath();ctx.moveTo(p0.x,p0.y);ctx.lineTo(p1.x,p1.y);
+      ctx.strokeStyle=`rgba(79,195,247,${a})`;ctx.lineWidth=w;ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke();
+    }
+    ctx.restore();
+  }
 
-    ctx.save();
-
-    const r = 14;
-
-    // 外发光
-    const glow = ctx.createRadialGradient(p.x, p.y, r * 0.2, p.x, p.y, r * 3);
-    glow.addColorStop(0, 'rgba(79, 195, 247, 0.3)');
-    glow.addColorStop(0.5, 'rgba(79, 195, 247, 0.08)');
-    glow.addColorStop(1, 'rgba(79, 195, 247, 0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(p.x, p.y, r * 3, 0, Math.PI * 2); ctx.fill();
-
-    // 球体本體 (径向渐变营造 3D 感)
-    const grad = ctx.createRadialGradient(
-      p.x - r * 0.3, p.y - r * 0.3, r * 0.1,
-      p.x, p.y, r
-    );
-    grad.addColorStop(0, '#b3e5fc');
-    grad.addColorStop(0.4, '#4fc3f7');
-    grad.addColorStop(0.85, '#0288d1');
-    grad.addColorStop(1, '#01579b');
-
-    ctx.shadowColor = 'rgba(79, 195, 247, 0.6)';
-    ctx.shadowBlur = 20;
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // 高光
-    const hl = ctx.createRadialGradient(
-      p.x - r * 0.3, p.y - r * 0.35, 0,
-      p.x - r * 0.3, p.y - r * 0.35, r * 0.5
-    );
-    hl.addColorStop(0, 'rgba(255,255,255,0.5)');
-    hl.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = hl;
-    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
-
+  function drawSphere() {
+    const c=toC(S.dx,S.dy);
+    if (c.x<px-50||c.x>px+pw+50||c.y<py-50||c.y>py+ph+50) return;
+    ctx.save(); const r=13;
+    const g=ctx.createRadialGradient(c.x,c.y,r*0.2,c.x,c.y,r*3);
+    g.addColorStop(0,'rgba(79,195,247,0.25)');g.addColorStop(0.5,'rgba(79,195,247,0.06)');g.addColorStop(1,'rgba(79,195,247,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(c.x,c.y,r*3,0,Math.PI*2);ctx.fill();
+    const gr=ctx.createRadialGradient(c.x-r*0.3,c.y-r*0.3,r*0.1,c.x,c.y,r);
+    gr.addColorStop(0,'#b3e5fc');gr.addColorStop(0.4,'#4fc3f7');gr.addColorStop(0.85,'#0288d1');gr.addColorStop(1,'#01579b');
+    ctx.shadowColor='rgba(79,195,247,0.5)';ctx.shadowBlur=16;ctx.fillStyle=gr;
+    ctx.beginPath();ctx.arc(c.x,c.y,r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    const hl=ctx.createRadialGradient(c.x-r*0.3,c.y-r*0.35,0,c.x-r*0.3,c.y-r*0.35,r*0.5);
+    hl.addColorStop(0,'rgba(255,255,255,0.45)');hl.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=hl;ctx.beginPath();ctx.arc(c.x,c.y,r,0,Math.PI*2);ctx.fill();
     ctx.restore();
   }
 
   /* ==========================================
      主循环
      ========================================== */
-  let lastFrameTime = 0;
-  const LERP_FACTOR = 0.13;
+  const LERP = 0.13;
 
-  function tick(timestamp) {
-    // 平滑插值位置
-    const dx = state.targetX - state.displayX;
-    const dy = state.targetY - state.displayY;
-    const dist = Math.hypot(dx, dy);
-    if (dist > 0.001) {
-      state.displayX += dx * LERP_FACTOR;
-      state.displayY += dy * LERP_FACTOR;
-    } else {
-      state.displayX = state.targetX;
-      state.displayY = state.targetY;
-    }
-
-    // 记录尾迹 (每帧都记录当前插值位置)
-    const p = toCanvas(state.displayX, state.displayY);
-    trail.push({ x: p.x, y: p.y, time: timestamp });
-
-    // 清理过期尾迹
-    const cutoff = timestamp - TRAIL_DURATION;
-    // 二分查找加速
-    let lo = 0, hi = trail.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1;
-      if (trail[mid].time < cutoff) lo = mid + 1;
-      else hi = mid;
-    }
-    if (lo > 0) trail.splice(0, lo);
-
-    // 检测连接超时 (3 秒无更新视为断连)
-    if (state.connected && (timestamp - state.lastFetchTime > 3000)) {
-      state.connected = false;
-      updateStatusUI();
-    }
-
-    draw();
+  function tick(ts) {
+    const dx=S.sx-S.dx, dy=S.sy-S.dy;
+    if (Math.hypot(dx,dy)>0.001) { S.dx+=dx*LERP; S.dy+=dy*LERP; }
+    else { S.dx=S.sx; S.dy=S.sy; }
+    const p=toC(S.dx,S.dy);
+    trail.push({x:p.x,y:p.y,time:ts});
+    const cut=ts-TRAIL_MS; let lo=0, hi=trail.length;
+    while (lo<hi) { const m=(lo+hi)>>>1; if (trail[m].time<cut) lo=m+1; else hi=m; }
+    if (lo>0) trail.splice(0,lo);
+    if (S.connected && ts-S.fetchT>3000) { S.connected=false; syncUI(); }
+    draw(ts);
     requestAnimationFrame(tick);
   }
 
@@ -595,25 +783,17 @@
      启动
      ========================================== */
   function init() {
-    // 响应式尺寸
-    const ro = new ResizeObserver(() => resize());
-    ro.observe(canvas);
-    resize();
-
-    // 拉取基站 & 启动数据轮询
-    fetchAnchors();
-    scheduleFetch();
-
-    // 启动动画循环
+    new ResizeObserver(()=>resize()).observe(canvas); resize();
+    buildAnchors();
+    setupTargetInputs();
+    setupControls();
+    fetchSt();
+    setInterval(fetchSt, 200);
     requestAnimationFrame(tick);
   }
 
-  // 等 DOM 就绪
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
 
 })();
 </script>

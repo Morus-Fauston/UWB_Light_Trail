@@ -11,26 +11,27 @@ import numpy as np
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_file
+import webbrowser, os
 
 # ==========================================
-# ⚙️ 核心战术网络配置
+# 核心战术网络配置
 # ==========================================
 MODULE_IP = "192.168.4.1"
 MODULE_PORT = 14550
 MSP_SET_RAW_RC = 200
-MSP_ATTITUDE = 108  # 🎯 索要飞机实时姿态(包含机头朝向)
+MSP_ATTITUDE = 108  # 索要飞机实时姿态(包含机头朝向)
 
 uwb_pattern = re.compile(r'A0:\s*([\d.]+)\s*A1:\s*([\d.]+)\s*A2:\s*([\d.]+)\s*A3:\s*([\d.]+)')
 
 # ==========================================
-# 🧠 全局状态与自动驾驶共享内存
+# 全局状态与自动驾驶共享内存
 # ==========================================
 state = {
     'x': 0.0, 'y': 0.0, 'z': 0.0,
     'yaw_angle': 0.0,
     'r0': 0.0, 'r1': 0.0, 'r2': 0.0, 'r3': 0.0,
-    # 📏 新增：UWB 系统误差零偏 (米)
+    # 新增：UWB 系统误差零偏 (米)
     'offset_r0': 0.0, 'offset_r1': 0.0, 'offset_r2': 0.0, 'offset_r3': 0.0,
     'target_x': 2.0, 'target_y': 2.0, 'target_z': 1.0,
     'throttle': 1000,
@@ -46,7 +47,7 @@ state = {
 
 
 # ==========================================
-# 📐 PID 控制器核心算法
+# PID 控制器核心算法
 # ==========================================
 class PIDController:
     def __init__(self, kp, ki, kd, output_limit):
@@ -110,7 +111,7 @@ def network_thread_logic():
     while True:
         current_time = time.time()
 
-        # 1. 📥 接收双路数据 (UWB文本 + 飞控二进制)
+        # 1. 接收双路数据 (UWB文本 + 飞控二进制)
         try:
             raw_data, _ = sock.recvfrom(2048)
 
@@ -120,7 +121,7 @@ def network_thread_logic():
                 match = uwb_pattern.search(text_line)
                 if match:
                     raw_r0, raw_r1, raw_r2, raw_r3 = map(float, match.groups())
-                    # 🎯 核心：在此处扣除校准误差！(保证最短距离为 0.01m 防止数学引擎除零崩溃)
+                    # 核心：在此处扣除校准误差！(保证最短距离为 0.01m 防止数学引擎除零崩溃)
                     state['r0'] = max(0.01, raw_r0 - state['offset_r0'])
                     state['r1'] = max(0.01, raw_r1 - state['offset_r1'])
                     state['r2'] = max(0.01, raw_r2 - state['offset_r2'])
@@ -146,7 +147,7 @@ def network_thread_logic():
         except BlockingIOError:
             pass
 
-        # 2. 🧠 执行 PID 与下发 (50Hz)
+        # 2. 执行 PID 与下发 (50Hz)
         if current_time - last_rc_time >= 0.02:
             dt = current_time - last_pid_time
             last_pid_time = current_time
@@ -176,7 +177,7 @@ def network_thread_logic():
             sock.sendto(packet, (MODULE_IP, MODULE_PORT))
             last_rc_time = current_time
 
-        # 3. 📤 索要飞机姿态 (10Hz)
+        # 3. 索要飞机姿态 (10Hz)
         if current_time - last_query_time >= 0.1:
             sock.sendto(request_msp_packet(MSP_ATTITUDE), (MODULE_IP, MODULE_PORT))
             last_query_time = current_time
@@ -185,12 +186,12 @@ def network_thread_logic():
 
 
 # ==========================================
-# 🖥️ GUI 界面引擎
+# GUI 界面引擎
 # ==========================================
 class DroneGCS(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("🛸 UAV 战术雷达 (全知天眼版 + 校准系统)")
+        self.title("UAV 地面站 (全知天眼版 + 校准系统)")
         self.geometry("1100x900")
         self.left_frame = ttk.Frame(self);
         self.left_frame.pack(side="left", fill="y", padx=10, pady=10)
@@ -203,12 +204,12 @@ class DroneGCS(tk.Tk):
         self.update_gui_loop()
 
     def create_panels(self):
-        ctrl_frame = ttk.LabelFrame(self.left_frame, text="🚀 核心动力系统", padding=10)
+        ctrl_frame = ttk.LabelFrame(self.left_frame, text="核心动力系统", padding=10)
         ctrl_frame.pack(fill="x", pady=5)
-        self.btn_arm = tk.Button(ctrl_frame, text="🔴 锁定状态 (点击解锁)", bg="#ffcccc",
+        self.btn_arm = tk.Button(ctrl_frame, text="锁定状态 (点击解锁)", bg="#ffcccc",
                                  font=("Microsoft YaHei", 12, "bold"), command=self.toggle_arm)
         self.btn_arm.pack(fill="x", pady=5)
-        self.btn_auto = tk.Button(ctrl_frame, text="🤖 开启自动驾驶 (Auto-Pilot)", bg="#e0e0e0",
+        self.btn_auto = tk.Button(ctrl_frame, text="开启自动驾驶 (Auto-Pilot)", bg="#e0e0e0",
                                   font=("Microsoft YaHei", 11, "bold"), command=self.toggle_auto)
         self.btn_auto.pack(fill="x", pady=5)
 
@@ -220,24 +221,24 @@ class DroneGCS(tk.Tk):
         self.slider_thr.set(1000);
         self.slider_thr.pack(fill="x")
 
-        rc_frame = ttk.LabelFrame(self.left_frame, text="📊 飞机状态与摇杆量", padding=10)
+        rc_frame = ttk.LabelFrame(self.left_frame, text="飞机状态与摇杆量", padding=10)
         rc_frame.pack(fill="x", pady=5)
         self.lbl_rc = ttk.Label(rc_frame, text="Roll: 1500 | Pitch: 1500", font=("Consolas", 10, "bold"),
                                 foreground="purple")
         self.lbl_rc.pack()
 
-        # 🎯 机头角度展示
+        # 机头角度展示
         self.lbl_yaw = ttk.Label(rc_frame, text="机头朝向 (Yaw): 0.0°", font=("Consolas", 12, "bold"),
                                  foreground="brown")
         self.lbl_yaw.pack(pady=5)
 
-        nav_frame = ttk.LabelFrame(self.left_frame, text="🎯 导航与测距", padding=10)
+        nav_frame = ttk.LabelFrame(self.left_frame, text="导航与测距", padding=10)
         nav_frame.pack(fill="x", pady=5)
         self.lbl_pos = ttk.Label(nav_frame, text="X: 0.00 | Y: 0.00 | Z: 0.00", font=("Consolas", 12, "bold"),
                                  foreground="blue")
         self.lbl_pos.pack(pady=5)
 
-        # 🎯 新增：显示 4 个基站的实时测距
+        # 新增：显示 4 个基站的实时测距
         self.lbl_raw_dist = ttk.Label(nav_frame, text="A0: 0.00m | A1: 0.00m | A2: 0.00m | A3: 0.00m",
                                       font=("Consolas", 10, "bold"), foreground="#d35400")
         self.lbl_raw_dist.pack(pady=2)
@@ -255,8 +256,8 @@ class DroneGCS(tk.Tk):
         self.e_z.insert(0, str(state['target_z']));
         self.e_z.pack(side="left", padx=2)
 
-        # 📏 新增：基站位置与UWB零偏校准综合面板
-        calib_frame = ttk.LabelFrame(self.left_frame, text="📍 基站位置与 UWB 零偏校准", padding=10)
+        # 新增：基站位置与UWB零偏校准综合面板
+        calib_frame = ttk.LabelFrame(self.left_frame, text="基站位置与 UWB 零偏校准", padding=10)
         calib_frame.pack(fill="x", pady=5)
 
         ttk.Label(calib_frame, text="节点").grid(row=0, column=0)
@@ -296,7 +297,7 @@ class DroneGCS(tk.Tk):
         self.canvas.mpl_connect('button_release_event', self.on_mouse_release)
         self.canvas.mpl_connect('motion_notify_event', self.on_mouse_motion)
 
-    # 🖱️ 雷达拖拽逻辑增强：支持拖拽基站！
+    # 雷达拖拽逻辑增强：支持拖拽基站！
     def on_mouse_press(self, event):
         if event.xdata is None or event.ydata is None: return
 
@@ -341,28 +342,28 @@ class DroneGCS(tk.Tk):
         if not state['is_armed']:
             if state['throttle'] > 1050: return
             state['is_armed'] = True
-            self.btn_arm.config(text="🟢 已解锁 (Armed)", bg="#ccffcc", fg="green")
+            self.btn_arm.config(text="已解锁 (Armed)", bg="#ccffcc", fg="green")
         else:
             state['is_armed'] = False;
             state['auto_mode'] = False
-            self.btn_auto.config(text="🤖 开启自动驾驶", bg="#e0e0e0", fg="black")
+            self.btn_auto.config(text="开启自动驾驶", bg="#e0e0e0", fg="black")
             state['throttle'] = 1000;
             self.slider_thr.set(1000)
-            self.btn_arm.config(text="🔴 锁定状态 (点击解锁)", bg="#ffcccc", fg="black")
+            self.btn_arm.config(text="锁定状态 (点击解锁)", bg="#ffcccc", fg="black")
 
     def toggle_auto(self):
         if not state['is_armed']: return
         state['auto_mode'] = not state['auto_mode']
         if state['auto_mode']:
-            self.btn_auto.config(text="⚡ 自动驾驶中 (点击接管)", bg="#ffd700", fg="red")
+            self.btn_auto.config(text="自动驾驶中 (点击接管)", bg="#ffd700", fg="red")
         else:
-            self.btn_auto.config(text="🤖 开启自动驾驶", bg="#e0e0e0", fg="black")
+            self.btn_auto.config(text="开启自动驾驶", bg="#e0e0e0", fg="black")
 
     def update_val(self, key, val):
         state[key] = int(float(val))
         if key == 'throttle': self.lbl_throttle.config(text=str(state['throttle']))
 
-        # 🛠️ 校准参数同步更新
+        # 校准参数同步更新
 
     def update_calib(self):
         try:
@@ -371,14 +372,14 @@ class DroneGCS(tk.Tk):
                 state['anchors'][i][1] = float(self.anchor_entries[i][1].get())
                 state['anchors'][i][2] = float(self.anchor_entries[i][2].get())
                 state[f'offset_r{i}'] = float(self.offset_entries[i].get())
-            print("✅ 基站坐标与 UWB 校准参数已更新！")
+            print("基站坐标与 UWB 校准参数已更新！")
         except ValueError:
-            print("❌ 参数输入错误，请输入有效数字！")
+            print("参数输入错误，请输入有效数字！")
 
     def update_gui_loop(self):
         self.lbl_pos.config(text=f"X: {state['x']:5.2f}m | Y: {state['y']:5.2f}m | Z: {state['z']:5.2f}m")
 
-        # 🎯 新增：实时刷新 4 个基站的距离，如果断联会直接显示 0.01 左右的极小值
+        # 新增：实时刷新 4 个基站的距离，如果断联会直接显示 0.01 左右的极小值
         self.lbl_raw_dist.config(
             text=f"A0: {state['r0']:4.2f}m | A1: {state['r1']:4.2f}m | A2: {state['r2']:4.2f}m | A3: {state['r3']:4.2f}m")
 
@@ -409,16 +410,17 @@ class DroneGCS(tk.Tk):
 
 
 # ==========================================
-# 🌐 Flask REST API — 外部获取 state
+# Flask REST API — 外部获取 state
 # ==========================================
 api_app = Flask(__name__)
 
 
-@api_app.after_request
-def add_cors_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-    return response
+@api_app.route("/")
+@api_app.route("/trail")
+def serve_trail():
+    """返回 Web 地面站页面"""
+    trail_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'trail.html')
+    return send_file(os.path.normpath(trail_path))
 
 
 @api_app.route("/api/state", methods=["GET"])
@@ -471,5 +473,9 @@ def run_api_server():
 if __name__ == "__main__":
     threading.Thread(target=network_thread_logic, daemon=True).start()
     threading.Thread(target=run_api_server, daemon=True).start()
+
+    # 自动打开 Web 地面站 (2s 后等 Flask 就绪)
+    threading.Timer(2.0, lambda: webbrowser.open('http://127.0.0.1:5000/trail')).start()
+
     app = DroneGCS()
     app.mainloop()
