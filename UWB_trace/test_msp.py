@@ -414,6 +414,13 @@ class DroneGCS(tk.Tk):
 api_app = Flask(__name__)
 
 
+@api_app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
+
+
 @api_app.route("/api/state", methods=["GET"])
 def get_state():
     """返回完整的无人机状态 JSON"""

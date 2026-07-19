@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UWB Light Trail — 动态二维尾迹</title>
+<style>
+  /* =============================================
+     Fluent Design — 深色主题
+     ============================================= */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-dark:       #0a0e14;
+    --bg-panel:      rgba(32, 38, 48, 0.82);
+    --border-panel:  rgba(255,255,255,0.06);
+    --text-primary:  #e8eaed;
+    --text-secondary:#9aa0a6;
+    --accent:        #4fc3f7;
+    --accent-glow:   rgba(79, 195, 247, 0.35);
+    --grid-color:    rgba(255,255,255,0.07);
+    --grid-major:    rgba(255,255,255,0.12);
+    --anchor-color:  #5c6bc0;
+    --trail-color:   #4fc3f7;
+    --status-on:     #4caf50;
+    --status-off:    #f44336;
+    --font:          'Segoe UI', -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif;
+    --radius:        10px;
+    --acrylic-blur:  24px;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg-dark);
+    font-family: var(--font);
+    color: var(--text-primary);
+    user-select: none;
+  }
+
+  /* ---- Canvas ---- */
+  #trailCanvas {
+    display: block;
+    width: 100%; height: 100%;
+    cursor: crosshair;
+  }
+
+  /* ---- 信息面板 (Fluent Acrylic) ---- */
+  #infoPanel {
+    position: fixed;
+    top: 20px; right: 20px;
+    min-width: 200px;
+    background: var(--bg-panel);
+    backdrop-filter: blur(var(--acrylic-blur));
+    -webkit-backdrop-filter: blur(var(--acrylic-blur));
+    border: 1px solid var(--border-panel);
+    border-radius: var(--radius);
+    padding: 18px 22px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+    z-index: 10;
+  }
+  #infoPanel h2 {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+  }
+  #infoPanel .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 0;
+    font-size: 14px;
+  }
+  #infoPanel .row .label { color: var(--text-secondary); }
+  #infoPanel .row .value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.3px;
+  }
+  #infoPanel .row .value.accent { color: var(--accent); }
+  #infoPanel .divider {
+    height: 1px;
+    background: var(--border-panel);
+    margin: 8px 0;
+  }
+  #statusDot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+    transition: background 0.3s ease;
+    box-shadow: 0 0 6px var(--status-on);
+    vertical-align: middle;
+  }
+  #statusDot.on  { background: var(--status-on); box-shadow: 0 0 6px var(--status-on); }
+  #statusDot.off { background: var(--status-off); box-shadow: 0 0 6px var(--status-off); }
+  #statusText {
+    font-size: 12px;
+    font-weight: 500;
+    vertical-align: middle;
+  }
+
+  /* ---- 左上角标题 ---- */
+  #titleBar {
+    position: fixed;
+    top: 20px; left: 20px;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #titleBar h1 {
+    font-size: 18px;
+    font-weight: 300;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+  }
+  #titleBar h1 strong {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  /* ---- 底部状态栏 ---- */
+  #statusBar {
+    position: fixed;
+    bottom: 20px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-panel);
+    backdrop-filter: blur(var(--acrylic-blur));
+    -webkit-backdrop-filter: blur(var(--acrylic-blur));
+    border: 1px solid var(--border-panel);
+    border-radius: calc(var(--radius) * 0.7);
+    padding: 6px 18px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+    z-index: 10;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  #statusBar .sep { margin: 0 10px; opacity: 0.3; }
+</style>
+</head>
+<body>
+
+<!-- 标题 -->
+<div id="titleBar">
+  <h1><strong>UWB</strong> Light Trail</h1>
+</div>
+
+<!-- 信息面板 -->
+<div id="infoPanel">
+  <h2>📍 实时位置</h2>
+  <div class="row">
+    <span class="label">X</span>
+    <span class="value accent" id="valX">—</span>
+  </div>
+  <div class="row">
+    <span class="label">Y</span>
+    <span class="value accent" id="valY">—</span>
+  </div>
+  <div class="row">
+    <span class="label">Z</span>
+    <span class="value accent" id="valZ">—</span>
+  </div>
+  <div class="divider"></div>
+  <div class="row">
+    <span class="label">▼ 时间</span>
+    <span class="value" id="valTime" style="font-size:12px;color:var(--text-secondary);">—</span>
+  </div>
+  <div class="divider"></div>
+  <div class="row">
+    <span id="statusDot" class="off"></span>
+    <span id="statusText">等待数据…</span>
+  </div>
+</div>
+
+<!-- 底部状态 -->
+<div id="statusBar">
+  <span id="fpsDisplay">0 FPS</span>
+  <span class="sep">|</span>
+  <span>更新 4.9 Hz</span>
+  <span class="sep">|</span>
+  <span id="trailPoints">尾迹 0 点</span>
+</div>
+
+<!-- Canvas -->
+<canvas id="trailCanvas"></canvas>
+
+<script>
+// =============================================
+//  UWB Light Trail — 引擎
+// =============================================
+
+(function() {
+  'use strict';
+
+  /* ---- DOM refs ---- */
+  const canvas = document.getElementById('trailCanvas');
+  const ctx = canvas.getContext('2d');
+
+  const elX = document.getElementById('valX');
+  const elY = document.getElementById('valY');
+  const elZ = document.getElementById('valZ');
+  const elTime = document.getElementById('valTime');
+  const elStatusDot = document.getElementById('statusDot');
+  const elStatusText = document.getElementById('statusText');
+  const elFps = document.getElementById('fpsDisplay');
+  const elTrailPts = document.getElementById('trailPoints');
+
+  /* ---- 坐标系 ---- */
+  const RANGE_MIN = -1;
+  const RANGE_MAX = 6;
+  const RANGE_SIZE = RANGE_MAX - RANGE_MIN;  // 7
+
+  /* ---- 状态 ---- */
+  const state = {
+    // 平滑插值
+    displayX: 0, displayY: 0,
+    targetX: 0, targetY: 0,
+    targetZ: 0,
+    // 时间戳
+    lastUpdate: 0,
+    lastFetchTime: 0,
+    // 基站 (锚点)
+    anchors: [
+      [0.0, 0.0], [0.0, 4.0],
+      [4.0, 4.0], [4.0, 0.0]
+    ],
+    // 连接状态
+    connected: false,
+    // FPS
+    frameCount: 0,
+    fpsTime: 0,
+    fps: 0,
+  };
+
+  /* ---- 尾迹 ---- */
+  const TRAIL_DURATION = 2000;  // 2 秒
+  let trail = [];
+
+  /* ---- 缩放缓存在变化时重新计算 ---- */
+  let dpr = 1;
+  let W = 0, H = 0;
+  let pad = { top: 60, bottom: 40, left: 60, right: 30 };
+  let plotX = 0, plotY = 0, plotW = 0, plotH = 0;
+  let scale = 1;
+
+  /* ==========================================
+     尺寸 / 像素比适配
+     ========================================== */
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    W = rect.width;
+    H = rect.height;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.scale(dpr, dpr);
+
+    pad = { top: 60, bottom: 40, left: 60, right: 30 };
+    plotX = pad.left;
+    plotY = pad.top;
+    plotW = W - pad.left - pad.right;
+    plotH = H - pad.top - pad.bottom;
+    scale = Math.min(plotW, plotH) / RANGE_SIZE;
+  }
+
+  /* ---- 坐标转换 ---- */
+  function toCanvas(rx, ry) {
+    const cx = plotX + (rx - RANGE_MIN) * scale + (plotW - scale * RANGE_SIZE) / 2;
+    const cy = plotY + (RANGE_MAX - ry) * scale + (plotH - scale * RANGE_SIZE) / 2;
+    return { x: cx, y: cy };
+  }
+
+  /* ==========================================
+     数据拉取
+     ========================================== */
+  async function fetchLocation() {
+    try {
+      const resp = await fetch('http://127.0.0.1:5000/api/location');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      state.targetX = data.x;
+      state.targetY = data.y;
+      state.targetZ = data.z;
+      state.lastUpdate = data.time;
+      state.lastFetchTime = performance.now();
+      if (!state.connected) {
+        state.connected = true;
+        updateStatusUI();
+      }
+    } catch (err) {
+      if (state.connected) {
+        state.connected = false;
+        updateStatusUI();
+      }
+    }
+  }
+
+  async function fetchAnchors() {
+    try {
+      const resp = await fetch('http://127.0.0.1:5000/api/state/anchors');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (data && data.anchors && Array.isArray(data.anchors)) {
+        state.anchors = data.anchors.map(a => [a[0], a[1]]);
+      }
+    } catch (_) { /* 使用默认锚点 */ }
+  }
+
+  function updateStatusUI() {
+    if (state.connected) {
+      elStatusDot.className = 'on';
+      elStatusText.textContent = '已连接';
+    } else {
+      elStatusDot.className = 'off';
+      elStatusText.textContent = '连接断开';
+    }
+  }
+
+  /* ---- 定时拉取 (100ms) ---- */
+  let fetchTimer = 0;
+  function scheduleFetch() {
+    fetchTimer = setInterval(fetchLocation, 100);
+    fetchLocation(); // 立即拉一次
+  }
+
+  /* ==========================================
+     绘图
+     ========================================== */
+  function draw() {
+    const now = performance.now();
+
+    // ---- 清空 ----
+    ctx.clearRect(0, 0, W, H);
+
+    // ---- 背景 ----
+    ctx.fillStyle = '#0a0e14';
+    ctx.fillRect(0, 0, W, H);
+
+    drawGrid();
+    drawAnchors();
+    drawTrail(now);
+    drawSphere(now);
+
+    // ---- 信息面板更新 ----
+    if (state.connected) {
+      const elapsed = (now - state.lastFetchTime) / 1000;
+      elX.textContent = state.displayX.toFixed(2) + ' m';
+      elY.textContent = state.displayY.toFixed(2) + ' m';
+      elZ.textContent = state.targetZ.toFixed(2) + ' m';
+      if (state.lastUpdate) {
+        const d = new Date(state.lastUpdate);
+        elTime.textContent = d.toLocaleTimeString('zh-CN', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3,'0');
+      }
+    }
+
+    // ---- FPS ----
+    state.frameCount++;
+    if (now - state.fpsTime >= 1000) {
+      state.fps = state.frameCount;
+      state.frameCount = 0;
+      state.fpsTime = now;
+      elFps.textContent = state.fps + ' FPS';
+    }
+    elTrailPts.textContent = '尾迹 ' + trail.length + ' 点';
+  }
+
+  /* ---- 网格 ---- */
+  function drawGrid() {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    ctx.font = '11px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    for (let v = RANGE_MIN; v <= RANGE_MAX; v++) {
+      const p = toCanvas(v, 0);
+
+      // 竖线
+      ctx.beginPath();
+      ctx.moveTo(p.x, plotY);
+      ctx.lineTo(p.x, plotY + plotH);
+      ctx.stroke();
+
+      // X 轴标签
+      ctx.fillText(v.toFixed(0), p.x, plotY + plotH + 8);
+
+      // 横线
+      ctx.beginPath();
+      ctx.moveTo(plotX, p.y);
+      ctx.lineTo(plotX + plotW, p.y);
+      ctx.stroke();
+
+      // Y 轴标签
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(v.toFixed(0), plotX - 8, p.y);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+    }
+
+    // 坐标轴加粗
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1.5;
+    const o = toCanvas(0, 0);
+    ctx.beginPath(); ctx.moveTo(plotX, o.y); ctx.lineTo(plotX + plotW, o.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(o.x, plotY); ctx.lineTo(o.x, plotY + plotH); ctx.stroke();
+
+    // 轴标签
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '12px ' + getComputedStyle(document.body).fontFamily;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText('X', plotX + plotW + 4, o.y - 6);
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText('Y', o.x - 8, plotY - 4);
+
+    // 原点标签
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.font = '10px ' + getComputedStyle(document.body).fontFamily;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.fillText('(0,0)', o.x - 4, o.y + 4);
+
+    ctx.restore();
+  }
+
+  /* ---- 基站 ---- */
+  function drawAnchors() {
+    const labels = ['A0', 'A1', 'A2', 'A3'];
+    state.anchors.forEach((pos, i) => {
+      const p = toCanvas(pos[0], pos[1]);
+      if (p.x < plotX - 20 || p.x > plotX + plotW + 20 ||
+          p.y < plotY - 20 || p.y > plotY + plotH + 20) return;
+
+      ctx.save();
+
+      // 发光外圈
+      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 18);
+      grad.addColorStop(0, 'rgba(92, 107, 192, 0.25)');
+      grad.addColorStop(1, 'rgba(92, 107, 192, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 18, 0, Math.PI * 2); ctx.fill();
+
+      // 方块
+      const sz = 10;
+      ctx.fillStyle = '#5c6bc0';
+      ctx.shadowColor = 'rgba(92,107,192,0.5)';
+      ctx.shadowBlur = 8;
+      ctx.fillRect(p.x - sz/2, p.y - sz/2, sz, sz);
+      ctx.shadowBlur = 0;
+
+      // 标签
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.font = '11px ' + getComputedStyle(document.body).fontFamily;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(labels[i], p.x, p.y - sz/2 - 4);
+
+      ctx.restore();
+    });
+  }
+
+  /* ---- 尾迹 ---- */
+  function drawTrail(now) {
+    const len = trail.length;
+    if (len < 2) return;
+
+    ctx.save();
+
+    // 每个 segment 单独绘制以实现渐变
+    for (let i = 1; i < len; i++) {
+      const p0 = trail[i - 1];
+      const p1 = trail[i];
+      const age = now - p1.time;
+      const t = Math.max(0, Math.min(1, age / TRAIL_DURATION)); // 0 = 最新, 1 = 最老
+
+      // 渐细渐透明
+      const alpha = Math.pow(1 - t, 1.5);
+      const width = Math.pow(1 - t, 1.8) * 8;
+
+      if (width < 0.5 || alpha < 0.01) continue;
+
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.strokeStyle = `rgba(79, 195, 247, ${alpha})`;
+      ctx.lineWidth = width;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  /* ---- 球体 ---- */
+  function drawSphere(now) {
+    const p = toCanvas(state.displayX, state.displayY);
+    if (p.x < plotX - 50 || p.x > plotX + plotW + 50 ||
+        p.y < plotY - 50 || p.y > plotY + plotH + 50) return;
+
+    ctx.save();
+
+    const r = 14;
+
+    // 外发光
+    const glow = ctx.createRadialGradient(p.x, p.y, r * 0.2, p.x, p.y, r * 3);
+    glow.addColorStop(0, 'rgba(79, 195, 247, 0.3)');
+    glow.addColorStop(0.5, 'rgba(79, 195, 247, 0.08)');
+    glow.addColorStop(1, 'rgba(79, 195, 247, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r * 3, 0, Math.PI * 2); ctx.fill();
+
+    // 球体本體 (径向渐变营造 3D 感)
+    const grad = ctx.createRadialGradient(
+      p.x - r * 0.3, p.y - r * 0.3, r * 0.1,
+      p.x, p.y, r
+    );
+    grad.addColorStop(0, '#b3e5fc');
+    grad.addColorStop(0.4, '#4fc3f7');
+    grad.addColorStop(0.85, '#0288d1');
+    grad.addColorStop(1, '#01579b');
+
+    ctx.shadowColor = 'rgba(79, 195, 247, 0.6)';
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // 高光
+    const hl = ctx.createRadialGradient(
+      p.x - r * 0.3, p.y - r * 0.35, 0,
+      p.x - r * 0.3, p.y - r * 0.35, r * 0.5
+    );
+    hl.addColorStop(0, 'rgba(255,255,255,0.5)');
+    hl.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = hl;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+
+    ctx.restore();
+  }
+
+  /* ==========================================
+     主循环
+     ========================================== */
+  let lastFrameTime = 0;
+  const LERP_FACTOR = 0.13;
+
+  function tick(timestamp) {
+    // 平滑插值位置
+    const dx = state.targetX - state.displayX;
+    const dy = state.targetY - state.displayY;
+    const dist = Math.hypot(dx, dy);
+    if (dist > 0.001) {
+      state.displayX += dx * LERP_FACTOR;
+      state.displayY += dy * LERP_FACTOR;
+    } else {
+      state.displayX = state.targetX;
+      state.displayY = state.targetY;
+    }
+
+    // 记录尾迹 (每帧都记录当前插值位置)
+    const p = toCanvas(state.displayX, state.displayY);
+    trail.push({ x: p.x, y: p.y, time: timestamp });
+
+    // 清理过期尾迹
+    const cutoff = timestamp - TRAIL_DURATION;
+    // 二分查找加速
+    let lo = 0, hi = trail.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (trail[mid].time < cutoff) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo > 0) trail.splice(0, lo);
+
+    // 检测连接超时 (3 秒无更新视为断连)
+    if (state.connected && (timestamp - state.lastFetchTime > 3000)) {
+      state.connected = false;
+      updateStatusUI();
+    }
+
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  /* ==========================================
+     启动
+     ========================================== */
+  function init() {
+    // 响应式尺寸
+    const ro = new ResizeObserver(() => resize());
+    ro.observe(canvas);
+    resize();
+
+    // 拉取基站 & 启动数据轮询
+    fetchAnchors();
+    scheduleFetch();
+
+    // 启动动画循环
+    requestAnimationFrame(tick);
+  }
+
+  // 等 DOM 就绪
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+})();
+</script>
+</body>
+</html>
