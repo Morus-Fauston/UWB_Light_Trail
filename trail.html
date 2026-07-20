@@ -1205,8 +1205,8 @@ html, body {
     return {
       pos: new THREE.Vector3(center, 24, -2.0),
       target: new THREE.Vector3(center, 0, -2.0),
-      fov: 8,
-      up: new THREE.Vector3(0, 0, 1)
+      fov: 18,
+      up: new THREE.Vector3(0, 0, -1)
     };
   }
 
@@ -1478,7 +1478,7 @@ html, body {
       onComplete: () => {
         mode3d = false;
         switchingTo2d = false;
-        camera3d.up.set(0, 0, 1);
+        camera3d.up.set(0, 0, -1);
         document.getElementById('trailCanvas3d').style.display = 'none';
         canvas.style.display = 'block';
         updateModeSwitchUI();
