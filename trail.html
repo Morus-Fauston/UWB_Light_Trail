@@ -70,13 +70,14 @@ html, body {
   border: 1px solid var(--border-panel);
   border-radius: var(--radius);
   overflow: hidden;
-  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   width: var(--panel-w);
   min-width: 0;
   flex-shrink: 0;
+  max-height: 1000px;
 }
 
-.collapsible-panel.collapsed { width: 36px; }
+.collapsible-panel.collapsed { width: 36px; max-height: 36px; }
 
 /* ---- 面板头部 ---- */
 .panel-header {
@@ -119,14 +120,16 @@ html, body {
 /* ---- 面板内容 ---- */
 .panel-body {
   width: 260px;
+  min-width: 260px;
   padding: 10px 12px 12px;
   overflow-y: auto;
-  max-height: 600px;
+  overflow-x: hidden;
+  transition: opacity 0.25s ease, padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .collapsible-panel.collapsed .panel-body {
-  max-height: 0;
   padding: 0 12px;
   overflow: hidden;
+  opacity: 0;
 }
 
 /* =============================================
@@ -256,26 +259,127 @@ html, body {
 .thr-value { font-size: 13px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
 
 /* =============================================
-   右上信息面板 (175% 缩放)
+   右侧面板容器
    ============================================= */
-#infoPanel {
+#rightContainer {
   position: fixed;
   top: 10px; right: 10px;
-  transform: scale(1.75);
-  transform-origin: top right;
-  width: 185px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+#rightContainer > * { pointer-events: auto; }
+
+/* ---- 信息面板 (可折叠 + 可切换大小) ---- */
+#rightContainer .collapsible-panel {
   background: var(--bg-panel);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(var(--acrylic-blur));
+  -webkit-backdrop-filter: blur(var(--acrylic-blur));
   border: 1px solid var(--border-panel);
   border-radius: var(--radius);
-  padding: 12px 14px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
-  pointer-events: none;
-  z-index: 10;
+  overflow: hidden;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 185px;
+  min-width: 0;
+  flex-shrink: 0;
+  align-self: flex-end;
+  max-height: 1000px;
+}
+#rightContainer .collapsible-panel.collapsed { width: 36px; max-height: 36px; overflow: hidden; }
+#rightContainer .collapsible-panel.collapsed .panel-body { overflow: hidden; }
+#rightContainer .collapsible-panel.collapsed .panel-header { padding: 0 8px; justify-content: flex-end; }
+
+/* 放大版 */
+#rightContainer .collapsible-panel.info-lg {
+  transform: scale(1.75);
+  transform-origin: top right;
 }
 
-/* XYZ 同行 */
+#rightContainer .collapsible-panel.info-sm {
+  transform: scale(1.0);
+  transform-origin: top right;
+}
+
+/* ---- 右侧面板头部 (标题居中，toggle 在右，size 在左) ---- */
+#rightContainer .panel-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 36px;
+  cursor: pointer;
+  gap: 6px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-panel);
+  justify-content: center;
+  transition: padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#rightContainer .collapsible-panel.collapsed .panel-header { border-bottom-color: transparent; }
+#rightContainer .collapsible-panel.collapsed .panel-header .panel-title { display: none; }
+#rightContainer .panel-header .toggle-btn {
+  position: absolute;
+  left: auto; right: 8px; top: 8px;
+  width: 20px; height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
+}
+#rightContainer .collapsible-panel.collapsed .panel-header .toggle-btn {
+  transform: rotate(180deg);
+}
+#rightContainer .panel-header .panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-align: center;
+}
+
+/* ---- 右侧面板内容 (跟左侧面板一致，但保持原有info样式) ---- */
+#rightContainer .panel-body {
+  width: 185px;
+  min-width: 185px;
+  padding: 8px 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 600px;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#rightContainer .collapsible-panel.collapsed .panel-body {
+  max-height: 0;
+  padding: 0 10px;
+  overflow: hidden;
+}
+
+/* ---- 大小切换按钮 ---- */
+.size-toggle-btn {
+  position: absolute;
+  left: 8px; top: 8px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: var(--font);
+  transition: color 0.2s;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+.size-toggle-btn:hover { color: var(--accent); }
+.collapsible-panel.collapsed .size-toggle-btn { display: none; }
+
+/* ---- 右侧面板内部样式 (从原infoPanel移植) ---- */
 .xyz-row {
   display: flex; justify-content: space-between; gap: 6px; margin-bottom: 6px;
 }
@@ -334,6 +438,7 @@ html, body {
   padding: 4px 14px;
   font-size: 11px; color: var(--text-secondary);
   z-index: 10; pointer-events: none; white-space: nowrap; letter-spacing: 0.3px;
+  display: flex; align-items: center;
 }
 #statusBar .sep { margin: 0 8px; opacity: 0.3; }
 
@@ -468,32 +573,41 @@ html, body {
 </div>
 
 <!-- =============================================
-     右上信息面板
+     右侧信息面板 (可折叠 + 可缩放)
      ============================================= -->
-<div id="infoPanel">
-  <div class="xyz-row">
-    <div class="xyz-item"><div class="xyz-label">X</div><div class="xyz-value" id="valX">—</div></div>
-    <div class="xyz-item"><div class="xyz-label">Y</div><div class="xyz-value" id="valY">—</div></div>
-    <div class="xyz-item"><div class="xyz-label">Z</div><div class="xyz-value" id="valZ">—</div></div>
-  </div>
-  <div class="info-divider"></div>
-  <div class="rc-grid">
-    <div class="rc-item"><span class="rlab">Roll</span><span class="rval" id="rcRoll">1500</span></div>
-    <div class="rc-item"><span class="rlab">Pitch</span><span class="rval" id="rcPitch">1500</span></div>
-    <div class="rc-item"><span class="rlab">Yaw</span><span class="rval" id="rcYaw">1500</span></div>
-    <div class="rc-item"><span class="rlab">Throttle</span><span class="rval" id="rcThrottle">1000</span></div>
-  </div>
-  <div class="info-divider"></div>
-  <div class="dist-grid">
-    <div class="dist-item"><span class="dlab">Δ0</span><span class="dval" id="d0">—</span></div>
-    <div class="dist-item"><span class="dlab">Δ1</span><span class="dval" id="d1">—</span></div>
-    <div class="dist-item"><span class="dlab">Δ2</span><span class="dval" id="d2">—</span></div>
-    <div class="dist-item"><span class="dlab">Δ3</span><span class="dval" id="d3">—</span></div>
-  </div>
-  <div class="info-divider"></div>
-  <div class="status-row">
-    <span id="statusDot" class="off"></span>
-    <span id="statusText">等待数据…</span>
+<div id="rightContainer">
+  <div class="collapsible-panel info-lg" id="infoPanel">
+    <div class="panel-header" onclick="togglePanel('infoPanel')">
+      <button class="size-toggle-btn" id="infoSizeBtn" onclick="event.stopPropagation(); toggleInfoSize();">缩小</button>
+      <span class="panel-title">仪表盘</span>
+      <span class="toggle-btn">&#9654;</span>
+    </div>
+    <div class="panel-body">
+      <div class="xyz-row">
+        <div class="xyz-item"><div class="xyz-label">X</div><div class="xyz-value" id="valX">—</div></div>
+        <div class="xyz-item"><div class="xyz-label">Y</div><div class="xyz-value" id="valY">—</div></div>
+        <div class="xyz-item"><div class="xyz-label">Z</div><div class="xyz-value" id="valZ">—</div></div>
+      </div>
+      <div class="info-divider"></div>
+      <div class="rc-grid">
+        <div class="rc-item"><span class="rlab">Roll</span><span class="rval" id="rcRoll">1500</span></div>
+        <div class="rc-item"><span class="rlab">Pitch</span><span class="rval" id="rcPitch">1500</span></div>
+        <div class="rc-item"><span class="rlab">Yaw</span><span class="rval" id="rcYaw">1500</span></div>
+        <div class="rc-item"><span class="rlab">Throttle</span><span class="rval" id="rcThrottle">1000</span></div>
+      </div>
+      <div class="info-divider"></div>
+      <div class="dist-grid">
+        <div class="dist-item"><span class="dlab">Δ0</span><span class="dval" id="d0">—</span></div>
+        <div class="dist-item"><span class="dlab">Δ1</span><span class="dval" id="d1">—</span></div>
+        <div class="dist-item"><span class="dlab">Δ2</span><span class="dval" id="d2">—</span></div>
+        <div class="dist-item"><span class="dlab">Δ3</span><span class="dval" id="d3">—</span></div>
+      </div>
+      <div class="info-divider"></div>
+      <div class="status-row">
+        <span id="statusDot" class="off"></span>
+        <span id="statusText">等待数据…</span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -630,7 +744,28 @@ html, body {
      面板控件
      ========================================== */
   window.togglePanel = function(id) {
-    document.getElementById(id).classList.toggle('collapsed');
+    const el = document.getElementById(id);
+    const body = el.querySelector('.panel-body');
+    if (el.classList.contains('collapsed')) {
+      body.style.overflowY = 'hidden';
+      el.classList.remove('collapsed');
+      setTimeout(() => { body.style.overflowY = 'auto'; }, 360);
+    } else {
+      body.style.overflowY = 'hidden';
+      el.classList.add('collapsed');
+    }
+  };
+
+  window.toggleInfoSize = function() {
+    const el = document.getElementById('infoPanel');
+    el.classList.toggle('info-lg');
+    el.classList.toggle('info-sm');
+    const btn = document.getElementById('infoSizeBtn');
+    if (el.classList.contains('info-lg')) {
+      btn.textContent = '缩小';
+    } else {
+      btn.textContent = '放大';
+    }
   };
 
   function buildAnchors() {
@@ -955,7 +1090,7 @@ html, body {
     if (S.connected && ts-S.fetchT>3000) { S.connected=false; syncUI(); }
 
     // 渲染
-    if (mode3d) { render3d(ts); }
+    if (mode3d || switchingTo2d) { render3d(ts); }
     else { draw(ts); }
 
     // 信息面板 (始终更新)
@@ -997,8 +1132,8 @@ html, body {
   let trail3dData = [];
   let camAnim = null;
 
-  /* 坐标映射: 物理 [x,y,z] → Three.js [x, z, y] (Y-up) */
-  function p2t(x, y, z) { return [x, z, y]; }
+  /* 坐标映射: 物理 [x,y,z] → Three.js [x, z, -y] (Y-up), Z 取反使物理+Y在透视中朝上 */
+  function p2t(x, y, z) { return [x, z, -y]; }
 
   function loadThreeJS() {
     return new Promise((resolve, reject) => {
@@ -1032,8 +1167,9 @@ html, body {
     scene.background = new THREE.Color(0x0a0e14);
     scene.fog = new THREE.FogExp2(0x0a0e14, 0.035);
 
-    camera3d = new THREE.PerspectiveCamera(50, W / H, 0.1, 200);
-    camera3d.position.set(2, 10, 2);
+    camera3d = new THREE.PerspectiveCamera(45, W / H, 0.1, 200);
+    camera3d.position.set(2.5, 24, -2.0);
+    camera3d.up.set(0, 1, 0);
 
     const c3d = document.getElementById('trailCanvas3d');
     renderer = new THREE.WebGLRenderer({ canvas: c3d, antialias: true });
@@ -1041,7 +1177,7 @@ html, body {
     renderer.setPixelRatio(dpr);
 
     controls3d = new THREE.OrbitControls(camera3d, renderer.domElement);
-    controls3d.target.set(2, 0, 2);
+    controls3d.target.set(2.5, 0, -2.0);
     controls3d.enableDamping = true;
     controls3d.dampingFactor = 0.08;
     controls3d.maxPolarAngle = Math.PI / 2.05;
@@ -1064,16 +1200,45 @@ html, body {
     scene.add(dir);
   }
 
+  function get2dLikeCameraState() {
+    const center = (RMIN + RMAX) / 2;  // 2.5
+    return {
+      pos: new THREE.Vector3(center, 24, -2.0),
+      target: new THREE.Vector3(center, 0, -2.0),
+      fov: 8,
+      up: new THREE.Vector3(0, 0, 1)
+    };
+  }
+
+  function get3dDefaultCameraState() {
+    const center = (RMIN + RMAX) / 2;
+    return {
+      pos: new THREE.Vector3(8, 7, 8),
+      target: new THREE.Vector3(center, 0, -2.0),
+      fov: 45,
+      up: new THREE.Vector3(0, 1, 0)
+    };
+  }
+
+  function setCameraState(state) {
+    camera3d.position.copy(state.pos);
+    controls3d.target.copy(state.target);
+    if (state.up) camera3d.up.copy(state.up);
+    camera3d.fov = state.fov;
+    camera3d.updateProjectionMatrix();
+    controls3d.update();
+  }
+
   function buildGroundGrid3d() {
     const THREE = window.THREE;
     const grid = new THREE.GridHelper(9, 18, 0x3a4a5a, 0x1a2a3a);
-    grid.position.set(2.5, 0, 2.5);
+    grid.position.set(2.5, 0, -2.0);
     scene.add(grid);
     const geo = new THREE.PlaneGeometry(9, 9);
     const mat = new THREE.MeshBasicMaterial({ color: 0x0d1117, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
     const ground = new THREE.Mesh(geo, mat);
     ground.rotation.x = -Math.PI / 2;
-    ground.position.set(2.5, -0.01, 2.5);
+    ground.position.set(2.5, -0.01, -2.0);
     scene.add(ground);
   }
 
@@ -1084,7 +1249,7 @@ html, body {
       return new THREE.Line(g, new THREE.LineBasicMaterial({ color }));
     };
     scene.add(mk([0,0,0],[7,0,0],0xff4444));
-    scene.add(mk([0,0,0],[0,0,7],0x44ff44));
+    scene.add(mk([0,0,0],[0,0,-7],0x44ff44));
     scene.add(mk([0,0,0],[0,5,0],0x4488ff));
   }
 
@@ -1123,7 +1288,7 @@ html, body {
 
   function buildTarget3d() {
     const THREE = window.THREE;
-    const geo = new THREE.SphereGeometry(0.25, 24, 24);
+    const geo = new THREE.SphereGeometry(0.125, 24, 24);
     const mat = new THREE.MeshPhongMaterial({ color: 0xff5722, emissive: 0x661a0a });
     targetMesh = new THREE.Mesh(geo, mat); scene.add(targetMesh);
     targetSprite = makeSprite3d('Target', '#ff5722'); scene.add(targetSprite);
@@ -1138,10 +1303,10 @@ html, body {
 
   function buildTag3d() {
     const THREE = window.THREE;
-    const geo = new THREE.SphereGeometry(0.2, 24, 24);
+    const geo = new THREE.SphereGeometry(0.14, 24, 24);
     const mat = new THREE.MeshPhongMaterial({ color: 0x4fc3f7, emissive: 0x1a4a5a, shininess: 80 });
     tagMesh = new THREE.Mesh(geo, mat); scene.add(tagMesh);
-    const gGeo = new THREE.SphereGeometry(0.4, 16, 16);
+    const gGeo = new THREE.SphereGeometry(0.28, 16, 16);
     const gMat = new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.15 });
     tagGlow = new THREE.Mesh(gGeo, gMat); scene.add(tagGlow);
     const pGeo = new THREE.BufferGeometry();
@@ -1168,8 +1333,26 @@ html, body {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     geo.setDrawRange(0, 0);
-    const mat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 });
-    trailLine3d = new THREE.Line(geo, mat); scene.add(trailLine3d);
+    /* 圆形纹理 */
+    const cv = document.createElement('canvas'); cv.width = 32; cv.height = 32;
+    const c = cv.getContext('2d');
+    const g = c.createRadialGradient(16, 16, 0, 16, 16, 16);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.8)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(0, 0, 32, 32);
+    const tex = new THREE.CanvasTexture(cv);
+    const mat = new THREE.PointsMaterial({
+      size: 0.14,
+      map: tex,
+      transparent: true,
+      opacity: 0.9,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true
+    });
+    trailLine3d = new THREE.Points(geo, mat); scene.add(trailLine3d);
   }
 
   function updateTrail3d(now) {
@@ -1232,6 +1415,11 @@ html, body {
       const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
       camera3d.position.lerpVectors(camAnim.from, camAnim.to, ease);
       controls3d.target.lerpVectors(camAnim.fromTarget, camAnim.toTarget, ease);
+      camera3d.fov = camAnim.fromFov + (camAnim.toFov - camAnim.fromFov) * ease;
+      if (camAnim.fromUp && camAnim.toUp) {
+        camera3d.up.lerpVectors(camAnim.fromUp, camAnim.toUp, ease).normalize();
+      }
+      camera3d.updateProjectionMatrix();
       if (t >= 1) { const cb = camAnim.onComplete; camAnim = null; if (cb) cb(); }
     }
     controls3d.update();
@@ -1241,39 +1429,56 @@ html, body {
 
   /* ---- 模式切换 ---- */
   function switchTo3d() {
-    if (mode3d || camAnim) return;
+    if (mode3d) return;
+    camAnim = null;
     loadThreeJS().then(() => {
       mode3d = true;
+      updateModeSwitchUI();
       document.getElementById('trailCanvas3d').style.display = 'block';
       canvas.style.display = 'none';
       renderer.setSize(W, H); renderer.setPixelRatio(dpr);
-      camera3d.position.set(2, 10, 2);
-      controls3d.target.set(2, 0, 2);
+      const startState = get2dLikeCameraState();
+      const endState = get3dDefaultCameraState();
+      setCameraState(startState);
       camAnim = {
-        from: new THREE.Vector3(2, 10, 2),
-        to: new THREE.Vector3(8, 6, 8),
-        fromTarget: new THREE.Vector3(2, 0, 2),
-        toTarget: new THREE.Vector3(2, 0, 2),
+        from: startState.pos.clone(),
+        to: endState.pos.clone(),
+        fromTarget: startState.target.clone(),
+        toTarget: endState.target.clone(),
+        fromFov: startState.fov,
+        toFov: endState.fov,
+        fromUp: startState.up.clone(),
+        toUp: endState.up.clone(),
         start: performance.now(), duration: 1000,
         onComplete: () => { controls3d.enabled = true; }
       };
-      updateModeSwitchUI();
     }).catch(() => {
       console.error('3D 模式加载失败，请检查网络连接');
     });
   }
 
+  let switchingTo2d = false;
+
   function switchTo2d() {
-    if (!mode3d || camAnim) return;
+    if (!mode3d || switchingTo2d) return;
+    switchingTo2d = true;
+    updateModeSwitchUI();
     controls3d.enabled = false;
+    const endState = get2dLikeCameraState();
     camAnim = {
       from: camera3d.position.clone(),
-      to: new THREE.Vector3(2, 10, 2),
+      to: endState.pos.clone(),
       fromTarget: controls3d.target.clone(),
-      toTarget: new THREE.Vector3(2, 0, 2),
+      toTarget: endState.target.clone(),
+      fromFov: camera3d.fov,
+      toFov: endState.fov,
+      fromUp: camera3d.up.clone(),
+      toUp: endState.up.clone(),
       start: performance.now(), duration: 1000,
       onComplete: () => {
         mode3d = false;
+        switchingTo2d = false;
+        camera3d.up.set(0, 0, 1);
         document.getElementById('trailCanvas3d').style.display = 'none';
         canvas.style.display = 'block';
         updateModeSwitchUI();
